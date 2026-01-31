@@ -1,0 +1,65 @@
+{
+  "cookies": [
+    {
+      "name": ".AspNetCore.Antiforgery.RDZzSVKO5CI",
+      "value": "CfDJ8EpTczT6bDxLptdasA-tuG_TomIP8V4cRg4X9FTjwvivH7qXSG4WDuyzOkLpEoSvGhE1XtFT6ZPTFQXExq4bYkXUuJNoqAUJeEKGd_vU3Sp7snhmatLpgseB4AsW5axUIa9H3OK9XRegggxEg2siy_I",
+      "domain": "authlogin.uatsiamsmile.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Strict"
+    },
+    {
+      "name": "idsrv.session",
+      "value": "90504E4BE1E50FB2665B85384D4BAAFB",
+      "domain": "authlogin.uatsiamsmile.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": ".AspNetCore.Identity.Application",
+      "value": "CfDJ8EpTczT6bDxLptdasA-tuG-psoOEn4V7XCcvEiTGbk-JAX3al_F0_jtOMA7jTjDlYKA0zXduceb-3x0FgGOKmkUlCMYs3Vw0MwKxurVNyUshOe5auBXaLtO-SnQLwxuPCs7bJ4LoZnZvtvw7u4tfqPNvuj1rsJ0ByvYW2ESKADe2QuKLOukQk7XO2WQmpZnz_1cAJtPU4xz0VaK5KYyImYfIzt3xcUGdLGGZszNvHsh2hZn0XZUq-S6QZl2yQobr8yazKkfSLbbvJdOxIdaBRg38K2EzXdFWIZns9WWsmQTEljOrgZmUUiNdqqSZ0WZVOu9OQP1zL0Q1TlTusFDXa_LtMMO_HbPuy2_BZzTUnrv5VQAIDKuD1BYYzQbGyIdJEvOdfUGWESyTnaPac75Ds95O-WOcLsaULRkn2zaipYGjKDjh_zIgIIInINYPzv_Fsw_C-Nh48WQuaSph9vTK6SImuSTWdW_PJ20nQlF8-sXT8_S12aJSOgT4hIdoHvEO5HREK-MIOs3TtzaO23He0ni3jPh5aKcz7Z4UoRbMnsvsksVk1qkB02eb9bHOM5nqLln0iqMWb_vnB4MbzIUYqif5EzBfXVynpaMKmTkq6Y7AP8_ZfVn8P84aL87x6jrLoHcYn2Woau6TlE6-YDEk77HKfxMYNKRK-1ISPAoo3WIUx2b0CgTO8B-eLLkdFcIF8a5-o1R-9itkWq_mU4WJ8yU7CYNl34i83DLpTP-J2IYoI94TWMT4KlIIzvktPDme9BzkhfK70l9W-Rh2FWQTD8amdc9Vo0knR5WN3t2KjBKqYfaG_rbW5Y_ZzGoPdFl0pAl_5obPvEaPUcuE7f_BcJJHUwu9jkDwEXKezkdHjjl2OjFK6mBHsDgV0GJHfEhou5Cl5pdJGjNCfHLg9gWcTaOzjlMsxHCRXlHPhITzO4eT3HNEu9XoJ3lN4s57DxcknmovqmOn8c1gXdFtiQFuSUFn0dhU7FRrY6K39MV7l8khxCPLSfSj4iWK8zdL_wuHybeGj-srhJ9Ewq3tnAXMWrW_k0GSfcWF5CKrchnZyUowDhh6eKNcvrCythLHcx-zbhVZKsQhIwhBb082wuZYcnIAwx93VTdCchTb1rb46755MvB_CYM4wbVqF3JeLYQm1ZqAj326xlNhcuyxj7a23m2CeEZ85Oa8SvjmRsbQAX0KklRGvl9ZWn5GM6DOnM5apZMyG0hGX4SXO8bcAUX6Vb4mHXqOtCRamdfsiqwelPLwCTYFyYLSPwraMFhYnW-i2LuyPS9O4-_hZESmnOD7w7h8ViNaE_2bwcGBrUNYqDkd2Xo-M9RGSyPizwVZR8Pdpw",
+      "domain": "authlogin.uatsiamsmile.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    }
+  ],
+  "origins": [
+    {
+      "origin": "https://telesale.uatsiamsmile.com",
+      "localStorage": [
+        {
+          "name": "lastLoggedInAgentId",
+          "value": "undefined"
+        },
+        {
+          "name": "originating_service_identifier",
+          "value": "CMASDK"
+        },
+        {
+          "name": "persist:cxone",
+          "value": "{\"auth\":\"\\\"NotAuthenticated\\\"\",\"authToken\":\"\\\"\\\"\",\"lastContactData\":\"null\",\"leadId\":\"null\",\"_persist\":\"{\\\"version\\\":1,\\\"rehydrated\\\":true}\"}"
+        },
+        {
+          "name": "oidc.user:https://authlogin.uatsiamsmile.com:06c69bc8-486b-4cdc-ba88-114f606097d7",
+          "value": "{\"id_token\":\"eyJhbGciOiJSUzI1NiIsImtpZCI6ImEyYzI4ZmNjLTc4ZjQtNGRhYy1iYWM4LTRkMGU5MmU5M2UzNyIsInR5cCI6IkpXVCJ9.eyJuYmYiOjE3Njk4MTc5NTUsImV4cCI6MTc2OTgxODI1NSwiaXNzIjoiaHR0cHM6Ly9hdXRobG9naW4udWF0c2lhbXNtaWxlLmNvbSIsImF1ZCI6IjA2YzY5YmM4LTQ4NmItNGNkYy1iYTg4LTExNGY2MDYwOTdkNyIsImlhdCI6MTc2OTgxNzk1NSwiYXRfaGFzaCI6Im5QbTlEMDhqTFdyRlQtV1RRZUNacmciLCJzX2hhc2giOiJuUk1KbnUxeHBiR0lORjRrZ21VdGVnIiwic2lkIjoiOTA1MDRFNEJFMUU1MEZCMjY2NUI4NTM4NEQ0QkFBRkIiLCJzdWIiOiI4MmQ4MDI3ZC1kZjBhLTQyN2UtOTA2OC0yN2ExNDA3ZWMxZTgiLCJhdXRoX3RpbWUiOjE3Njk4MTc5NTUsImlkcCI6ImxvY2FsIiwicm9sZSI6WyJDbGFpbU1vdG9yX0FkbWluIiwiUG9zdFRyYWNraW5nX0FkbWluIiwiVGVsZXNhbGVfQWRtaW4iLCJQcmVtaXVtX09yZGVyX1VzZXIiLCJEZXZlbG9wZXIiXSwicHJlZmVycmVkX3VzZXJuYW1lIjoiMDkxMzMiLCJuYW1lIjoiMDkxMzMiLCJlbWFpbCI6IjA5MTMzQHNpYW1zbWlsZS5jby50aCIsImVtYWlsX3ZlcmlmaWVkIjpmYWxzZSwicGVybWlzc2lvbiI6WyJwcmVtaXVtX2FwaTpyZXBvcnRwYV9tb250aGx5IiwidGVsZXNhbGVfYXBpOmFkbWluIl0sInVzZXJfaWQiOjI5OTI1LCJlbXBsb3llZV9jb2RlIjoiMDkxMzMiLCJlbXBsb3llZV9maXJzdG5hbWUiOiLguIjguK3guKHguIrguLHguKIiLCJlbXBsb3llZV9sYXN0bmFtZSI6IuC4quC4uOC4guC4quC4seC4h-C4p-C4suC4peC4ouC5jCIsImVtcGxveWVlX2JyYW5jaGlkIjo3MCwiZW1wbG95ZWVfYnJhbmNobmFtZSI6IuC4quC4s-C4meC4seC4geC4h-C4suC4meC5g-C4q-C4jeC5iCIsIlVzZXJuYW1lIjoiMDkxMzMiLCJFbXBsb3llZV9JRCI6MTQ1MDIyLCJFbXBsb3llZUNvZGUiOiIwOTEzMyIsIlBlcnNvbl9JRCI6MjI2NjE2NywiRnVsbE5hbWUiOiLguIjguK3guKHguIrguLHguKIg4Liq4Li44LiC4Liq4Lix4LiH4Lin4Liy4Lil4Lii4LmMIiwiRmlyc3ROYW1lIjoi4LiI4Lit4Lih4LiK4Lix4LiiIiwiTGFzdE5hbWUiOiLguKrguLjguILguKrguLHguIfguKfguLLguKXguKLguYwiLCJCcmFuY2hfSUQiOjcwLCJCcmFuY2hEZXRhaWwiOiLguKrguLPguJnguLHguIHguIfguLLguJnguYPguKvguI3guYgiLCJBcmVhX0lEIjo5LCJBcmVhRGV0YWlsIjoi4Liq4Liz4LiZ4Lix4LiB4LiH4Liy4LiZ4LmD4Lir4LiN4LmIIiwiRGVwYXJ0bWVudF9JRCI6NywiRGVwYXJ0bWVudERldGFpbCI6IuC4nuC4seC4kuC4meC4suC4o-C4sOC4muC4miIsIkVtcGxveWVlVGVhbV9JRCI6MjI5MywiRW1wbG95ZWVUZWFtRGV0YWlsIjoi4LmB4Lic4LiZ4LiB4Lin4Li04LmA4LiE4Lij4Liy4Liw4Lir4LmM4LiY4Li44Lij4LiB4Li04LiIIChCdXNpbmVzcyBBbmFseXNpcykiLCJFbXBsb3llZVBvc2l0aW9uX0lEIjozNSwiRW1wbG95ZWVQb3NpdGlvbkRldGFpbCI6IuC4nuC4meC4seC4geC4h-C4suC4meC4m-C4j-C4tOC4muC4seC4leC4tOC4geC4suC4oyIsImFtciI6WyJwd2QiXX0.aul0enIgn4WIMhO_aCcR_xsrQ1RIXXBmFCUEQS-7RzRg8GuqiXqNOyo2HTmw7glOYMT_gcIHKYov1w9n9yEOEGDc0T3fQoUfJi3E8FDhRv1HBVKgzHYcIN1BvRtNbUUON2BDtrU5_JO48hiGdSg2AQoeq2FfKpd3Q1i7ixETTbi-J6a7fNd63SMs-2rqsI7hjx4elCK6sjuhop9BLhbqfSwczsK2nO5__qhDt4L6cTwsnSpCNblFe2IXQWrZlKIMUMCCDWN6bh13LBvPjr6Kmm33-NPaYDSgSPRsnEOpnwGjgeEg7I2Ac82Aoq5D34YhMVjAk0s2B08YS1Uu23gt0w\",\"session_state\":\"rwB3Espi1ecDjea5k0nU-BDmKavOJMKptLKhg7tPsck.E514C055DBCEA9938C0375071967AE0C\",\"access_token\":\"eyJhbGciOiJSUzI1NiIsImtpZCI6ImEyYzI4ZmNjLTc4ZjQtNGRhYy1iYWM4LTRkMGU5MmU5M2UzNyIsInR5cCI6ImF0K2p3dCJ9.eyJuYmYiOjE3Njk4MTc5NTUsImV4cCI6MTc2OTgyMTU1NSwiaXNzIjoiaHR0cHM6Ly9hdXRobG9naW4udWF0c2lhbXNtaWxlLmNvbSIsImF1ZCI6WyJwcmVtaXVtX2FwaSIsInNtaWxlc2luc3VyYW5jZV9hcGkiLCJxdWV1ZV9hcGkiLCJ0ZWxlc2FsZV9hcGkiLCJkYXRhc3RhZ2luZ19hcGkiXSwiY2xpZW50X2lkIjoiMDZjNjliYzgtNDg2Yi00Y2RjLWJhODgtMTE0ZjYwNjA5N2Q3Iiwic3ViIjoiODJkODAyN2QtZGYwYS00MjdlLTkwNjgtMjdhMTQwN2VjMWU4IiwiYXV0aF90aW1lIjoxNzY5ODE3OTU1LCJpZHAiOiJsb2NhbCIsInJvbGUiOlsiQ2xhaW1Nb3Rvcl9BZG1pbiIsIlBvc3RUcmFja2luZ19BZG1pbiIsIlRlbGVzYWxlX0FkbWluIiwiUHJlbWl1bV9PcmRlcl9Vc2VyIiwiRGV2ZWxvcGVyIl0sInBlcm1pc3Npb24iOlsicHJlbWl1bV9hcGk6cmVwb3J0cGFfbW9udGhseSIsInRlbGVzYWxlX2FwaTphZG1pbiJdLCJ1c2VyX2lkIjoyOTkyNSwiZW1wbG95ZWVfY29kZSI6IjA5MTMzIiwiZW1wbG95ZWVfZmlyc3RuYW1lIjoi4LiI4Lit4Lih4LiK4Lix4LiiIiwiZW1wbG95ZWVfbGFzdG5hbWUiOiLguKrguLjguILguKrguLHguIfguKfguLLguKXguKLguYwiLCJlbXBsb3llZV9icmFuY2hpZCI6NzAsImVtcGxveWVlX2JyYW5jaG5hbWUiOiLguKrguLPguJnguLHguIHguIfguLLguJnguYPguKvguI3guYgiLCJVc2VybmFtZSI6IjA5MTMzIiwiRW1wbG95ZWVfSUQiOjE0NTAyMiwiRW1wbG95ZWVDb2RlIjoiMDkxMzMiLCJQZXJzb25fSUQiOjIyNjYxNjcsIkZ1bGxOYW1lIjoi4LiI4Lit4Lih4LiK4Lix4LiiIOC4quC4uOC4guC4quC4seC4h-C4p-C4suC4peC4ouC5jCIsIkZpcnN0TmFtZSI6IuC4iOC4reC4oeC4iuC4seC4oiIsIkxhc3ROYW1lIjoi4Liq4Li44LiC4Liq4Lix4LiH4Lin4Liy4Lil4Lii4LmMIiwiQnJhbmNoX0lEIjo3MCwiQnJhbmNoRGV0YWlsIjoi4Liq4Liz4LiZ4Lix4LiB4LiH4Liy4LiZ4LmD4Lir4LiN4LmIIiwiQXJlYV9JRCI6OSwiQXJlYURldGFpbCI6IuC4quC4s-C4meC4seC4geC4h-C4suC4meC5g-C4q-C4jeC5iCIsIkRlcGFydG1lbnRfSUQiOjcsIkRlcGFydG1lbnREZXRhaWwiOiLguJ7guLHguJLguJnguLLguKPguLDguJrguJoiLCJFbXBsb3llZVRlYW1fSUQiOjIyOTMsIkVtcGxveWVlVGVhbURldGFpbCI6IuC5geC4nOC4meC4geC4p-C4tOC5gOC4hOC4o-C4suC4sOC4q-C5jOC4mOC4uOC4o-C4geC4tOC4iCAoQnVzaW5lc3MgQW5hbHlzaXMpIiwiRW1wbG95ZWVQb3NpdGlvbl9JRCI6MzUsIkVtcGxveWVlUG9zaXRpb25EZXRhaWwiOiLguJ7guJnguLHguIHguIfguLLguJnguJvguI_guLTguJrguLHguJXguLTguIHguLLguKMiLCJqdGkiOiJFQjY3QjYxQzE1NEMzNzUxRkQ2MUMzQ0FFRjg0QTQ1MyIsInNpZCI6IjkwNTA0RTRCRTFFNTBGQjI2NjVCODUzODRENEJBQUZCIiwiaWF0IjoxNzY5ODE3OTU1LCJzY29wZSI6WyJvcGVuaWQiLCJwcm9maWxlIiwicm9sZXMiLCJlbWFpbCIsImVtcGxveWVlX3Byb2ZpbGUiLCJlbXBsb3llZV90ZWFtIiwiZW1wbG95ZWVfcG9zaXRpb24iLCJlbXBsb3llZV9kZXBhcnRtZW50IiwiZW1wbG95ZWVfYnJhbmNoIiwicXVldWVfYXBpIiwidGVsZXNhbGVfYXBpIiwicHJlbWl1bV9hcGkiLCJkYXRhc3RhZ2luZ19hcGkiXSwiYW1yIjpbInB3ZCJdfQ.OBd393OB8JI83ItSBf8-4axkKoSGgityHkQNY-kDpyP5SIQbIXC7z-G_Ps82Zz_lH1gs6PheAsTM_Gu4M0lnAF-tdhI5NEj8L8Z6gFo_JSMSAOmRVoqnPX-Rgzm1_GMNsscgLKBDvbb3CjKwRGIUUGF3jnYQj4W8vLNKJxKJfF9I-_eYVOld2yRQEV9kyKPi8qhyzmDSq4NPpAWo-J1dCZ-4S1Il0CVgcHWHqnlt7z6p5W35BFklt3eseAEwpE08_h5JKjXctYUYFrVJHMoS3Y0PyBLR5TreP3pru4DiljWP5FYG9LYRWyAEd9YKIH1X-Bp6CbtJDB_kNPbm2RFryw\",\"token_type\":\"Bearer\",\"scope\":\"openid profile roles email employee_profile employee_team employee_position employee_department employee_branch queue_api telesale_api premium_api datastaging_api\",\"profile\":{\"exp\":1769818255,\"iss\":\"https://authlogin.uatsiamsmile.com\",\"aud\":\"06c69bc8-486b-4cdc-ba88-114f606097d7\",\"iat\":1769817955,\"s_hash\":\"nRMJnu1xpbGINF4kgmUteg\",\"sid\":\"90504E4BE1E50FB2665B85384D4BAAFB\",\"sub\":\"82d8027d-df0a-427e-9068-27a1407ec1e8\",\"idp\":\"local\",\"role\":[\"ClaimMotor_Admin\",\"PostTracking_Admin\",\"Telesale_Admin\",\"Premium_Order_User\",\"Developer\"],\"preferred_username\":\"09133\",\"name\":\"09133\",\"email\":\"09133@siamsmile.co.th\",\"email_verified\":false,\"permission\":[\"premium_api:reportpa_monthly\",\"telesale_api:admin\"],\"user_id\":29925,\"employee_code\":\"09133\",\"employee_firstname\":\"จอมชัย\",\"employee_lastname\":\"สุขสังวาลย์\",\"employee_branchid\":70,\"employee_branchname\":\"สำนักงานใหญ่\",\"Username\":\"09133\",\"Employee_ID\":145022,\"EmployeeCode\":\"09133\",\"Person_ID\":2266167,\"FullName\":\"จอมชัย สุขสังวาลย์\",\"FirstName\":\"จอมชัย\",\"LastName\":\"สุขสังวาลย์\",\"Branch_ID\":70,\"BranchDetail\":\"สำนักงานใหญ่\",\"Area_ID\":9,\"AreaDetail\":\"สำนักงานใหญ่\",\"Department_ID\":7,\"DepartmentDetail\":\"พัฒนาระบบ\",\"EmployeeTeam_ID\":2293,\"EmployeeTeamDetail\":\"แผนกวิเคราะห์ธุรกิจ (Business Analysis)\",\"EmployeePosition_ID\":35,\"EmployeePositionDetail\":\"พนักงานปฏิบัติการ\"},\"expires_at\":1769821557}"
+        },
+        {
+          "name": "persist:layout",
+          "value": "{\"drawerOpen\":\"true\",\"darkMode\":\"false\",\"currentTitle\":\"\\\"Home\\\"\",\"toggleMenu\":\"true\",\"responsiveKey\":\"\\\"xl\\\"\",\"recentUsedMenu\":\"[1,2,3,4,5]\",\"allAppDialogOpen\":\"false\",\"_persist\":\"{\\\"version\\\":1,\\\"rehydrated\\\":true}\"}"
+        },
+        {
+          "name": "auth_consumer",
+          "value": "{\"cxoneHostname\":\"https://cxone.niceincontact.com\",\"clientId\":\"a5a73aa6-e661-4254-8de8-e7d25599450a\",\"redirectUri\":\"https://telesale.uatsiamsmile.com/cxone-callback\",\"originatingServiceIdentifier\":\"CMASDK\"}"
+        }
+      ]
+    }
+  ]
+}

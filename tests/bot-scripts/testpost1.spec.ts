@@ -1,0 +1,33 @@
+import { test, expect } from "@playwright/test";
+
+test("testttt", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "เอกสารส่งออก" }).click();
+  await page.getByRole("link", { name: "บันทึกส่งออก", exact: true }).click();
+  await page.getByRole("combobox", { name: "ส่งถึงสาขา" }).click();
+  await page.getByText("AR1", { exact: true }).click();
+  await page.getByRole("combobox", { name: "ผู้ให้บริการ" }).click();
+  await page.getByText("ไปรษณีย์ไทย - ลงทะเบียน").click();
+  await page.getByLabel("เบอร์โทร *").click();
+  await page.getByLabel("เบอร์โทร *").fill("061-496-5654 ");
+  await page.getByRole("textbox", { name: "ชื่อผู้รับ" }).click();
+  await page.getByRole("textbox", { name: "ชื่อผู้รับ" }).fill("test bot1");
+  await page.getByRole("textbox", { name: "ชื่อเอกสาร" }).click();
+  await page.getByRole("textbox", { name: "ชื่อเอกสาร" }).fill("test1");
+  await page.getByRole("textbox", { name: "จำนวน", exact: true }).click();
+  await page.getByRole("textbox", { name: "จำนวน", exact: true }).fill("10");
+  await page.getByRole("textbox", { name: "จำนวนเงิน" }).click();
+  await page.getByRole("textbox", { name: "จำนวนเงิน" }).fill("10.00");
+  await page.getByRole("button", { name: "เพิ่มเอกสาร" }).click();
+  await page.getByRole("textbox", { name: "ชื่อเอกสาร" }).click();
+  await page.getByRole("textbox", { name: "ชื่อเอกสาร" }).fill("test2");
+  await page.getByRole("textbox", { name: "จำนวน", exact: true }).click();
+  await page.getByRole("textbox", { name: "จำนวน", exact: true }).fill("10");
+  await page.getByRole("textbox", { name: "จำนวนเงิน" }).click();
+  await page.getByRole("textbox", { name: "จำนวนเงิน" }).fill("140.00");
+  await page.getByLabel("หมายเหตุ *").click();
+  await page.getByLabel("หมายเหตุ *").fill("reeeetr");
+  await page.getByRole("button", { name: "เพิ่มเอกสาร" }).click();
+  await page.getByRole("button", { name: "บันทึก" }).click();
+  await page.getByRole("button", { name: "ตกลง" }).click();
+});
