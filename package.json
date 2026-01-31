@@ -1,7 +1,7 @@
 {
   "name": "automation-system-hub",
   "productName": "automation-system-hub",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Automation System Hub",
   "main": ".vite/build/main.js",
   "private": true,
