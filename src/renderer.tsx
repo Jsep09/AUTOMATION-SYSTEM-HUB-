@@ -5,7 +5,7 @@ import {
   List, ListItem, ListItemText, IconButton, Chip, Stack,
   Dialog, DialogTitle, DialogContent, DialogActions, Alert,
   CircularProgress, Card, CardContent, Divider, Grid, CardActionArea,
-  Backdrop, FormControlLabel, Checkbox
+  Backdrop, FormControlLabel, Checkbox, createTheme, ThemeProvider, CssBaseline, keyframes
 } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import AddIcon from '@mui/icons-material/Add';
@@ -25,6 +25,12 @@ import EditIcon from '@mui/icons-material/Edit';
 import CloseIcon from '@mui/icons-material/Close';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
+import Brightness4Icon from '@mui/icons-material/Brightness4';
+import Brightness7Icon from '@mui/icons-material/Brightness7';
+import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
+import TerminalIcon from '@mui/icons-material/Terminal';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import { Toaster, toast } from 'sonner';
 
 // Interface matching the new backend structure
@@ -55,6 +61,9 @@ interface ElectronAPI {
   saveEnvs: (envs: Profile[]) => Promise<{ success: boolean }>;
   getSessionStatus: (envId: string) => Promise<{ isLoggedIn: boolean; expiresIn: number; loginTime: number | null }>;
   logout: (envId: string) => Promise<{ success: boolean }>;
+  recordScript: (data: { envId?: string; url?: string }) => Promise<{ success: boolean; content: string; error?: string }>;
+  onLog: (callback: (data: string) => void) => void;
+  offLog: () => void;
 }
 
 declare global {
@@ -63,7 +72,46 @@ declare global {
   }
 }
 
+
+// --- Theme Definitions ---
+const lightTheme = createTheme({
+  palette: {
+    mode: 'light',
+    primary: { main: '#1976d2' },
+    background: { default: '#ffffff', paper: '#f5f5f5' },
+  },
+});
+
+const darkTheme = createTheme({
+  palette: {
+    mode: 'dark',
+    primary: { main: '#90caf9' },
+    background: { default: '#121212', paper: '#1e1e1e' },
+    text: { primary: '#ffffff', secondary: '#b0bec5' },
+  },
+});
+
+const rgbAnimation = keyframes`
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+`;
+
 export default function Dashboard() {
+  // Theme State
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    const savedTheme = localStorage.getItem('theme');
+    return savedTheme ? savedTheme === 'dark' : true; // Default to true (Dark Mode)
+  });
+
+  const toggleTheme = () => {
+    const newMode = !isDarkMode;
+    setIsDarkMode(newMode);
+    localStorage.setItem('theme', newMode ? 'dark' : 'light');
+  };
+
+  const currentTheme = isDarkMode ? darkTheme : lightTheme;
+
   const [tabValue, setTabValue] = useState(0);
 
   // Data State
@@ -73,6 +121,7 @@ export default function Dashboard() {
   // Dialog State
   const [openAddScript, setOpenAddScript] = useState(false);
   const [openLoginDialog, setOpenLoginDialog] = useState(false);
+  const [openRecordDialog, setOpenRecordDialog] = useState(false); // New: Recorder Selection Dialog
 
   // Profile Editing State (Modal)
   const [openProfileDialog, setOpenProfileDialog] = useState(false);
@@ -81,9 +130,40 @@ export default function Dashboard() {
   // Loading State
   const [loading, setLoading] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
+  const [isRecording, setIsRecording] = useState(false); // New: Is Recording Active?
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
   const [scriptStatuses, setScriptStatuses] = useState<Record<string, 'idle' | 'running' | 'success' | 'error'>>({});
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Terminal State
+  const [terminalOpen, setTerminalOpen] = useState(true);
+  const [logs, setLogs] = useState<string[]>([]);
+  const terminalEndRef = React.useRef<HTMLDivElement>(null);
+
+  // Auto-scroll terminal
+  useEffect(() => {
+    if (terminalOpen && terminalEndRef.current) {
+        terminalEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [logs, terminalOpen]);
+
+  // Subscribe to logs
+  useEffect(() => {
+     window.electronAPI.onLog((data) => {
+         // Clean ANSI codes if necessary, or just display raw
+         // For multiline data, split it so we render clean lines
+         const lines = data.split('\n');
+         setLogs(prev => {
+             // Limit log history to last 500 lines to prevent lag
+             const newLogs = [...prev, ...lines].filter(l => l.trim().length > 0);
+             return newLogs.slice(-500); 
+         });
+         // Auto open terminal on new activity if it was closed? No, let user control.
+     });
+     return () => {
+         window.electronAPI.offLog();
+     };
+  }, []);
 
   // Forms
   const defaultScriptTemplate = `import { test, expect } from '@playwright/test';
@@ -337,6 +417,54 @@ test('My Test', async ({ page }) => {
     resetScriptForm();
   };
 
+  // --- Magic Recorder Logic ---
+  const [recordTargetEnvId, setRecordTargetEnvId] = useState('');
+  const [recordStartUrl, setRecordStartUrl] = useState('');
+
+  const handleOpenRecordDialog = () => {
+     if (profiles.length > 0) {
+        setRecordTargetEnvId(profiles[0].id);
+        setRecordStartUrl(profiles[0].variables['BASE_URL'] || '');
+     }
+     setOpenRecordDialog(true);
+  };
+
+  const handleStartRecording = async () => {
+    setOpenRecordDialog(false);
+    setIsRecording(true);
+    toast.info("Launching Recorder...", { description: "Playwright Inspector will open. Perform your actions, then close the browser to save." });
+
+    try {
+      const result = await window.electronAPI.recordScript({ 
+         envId: recordTargetEnvId,
+         url: recordStartUrl 
+      });
+
+      if (result.success) {
+         // Open Add Dialog with generated code
+         setNewScript({
+            name: `recorded_${Date.now()}`,
+            envId: recordTargetEnvId, // Auto-assign to the profile we used
+            content: result.content,
+            startUrl: recordStartUrl
+         });
+         setOpenAddScript(true);
+         toast.success("Recording Captured!", { description: "Script code generated successfully." });
+      } else {
+         if (result.error && !result.error.includes("No recording generated")) {
+            toast.error("Recording Failed", { description: result.error });
+         } else {
+            toast.info("Recording Cancelled");
+         }
+      }
+    } catch (err: any) {
+       toast.error("Recorder Error: " + err.message);
+    } finally {
+       setIsRecording(false);
+    }
+  };
+
+
   // --- Profile Management (New Dialog Based) ---
 
   const handlePrepareAddProfile = () => {
@@ -440,24 +568,41 @@ test('My Test', async ({ page }) => {
   });
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4 }}>
-      <Toaster position="bottom-right" richColors />
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" sx={{ fontWeight: 'bold', fontFamily: 'Orbitron, sans-serif' }}>
-          AUTOMATION SYSTEM HUB
-        </Typography>
-
-        <Button
-          variant="contained"
-          color="secondary"
-          startIcon={loginLoading && !activeProfileId ? <CircularProgress size={20} color="inherit" /> : <LoginIcon />}
-          onClick={() => setOpenLoginDialog(true)}
-          disabled={loginLoading || loading || profiles.length === 0}
-        >
-          {loginLoading && !activeProfileId ? 'Logging in...' : 'Login Bot '}
-        </Button>
-      </Box>
-      <Typography variant="h6" sx={{ fontWeight: 'bold', fontFamily: 'Orbitron, sans-serif' }}>
+    <ThemeProvider theme={currentTheme}>
+      <CssBaseline />
+      <Container maxWidth="lg" sx={{ mt: 4 }}>
+        <Toaster position="bottom-right" richColors theme={isDarkMode ? 'dark' : 'light'} />
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Typography variant="h4" sx={{ fontWeight: 'bold', fontFamily: 'Orbitron, sans-serif' }}>
+              AUTOMATION SYSTEM HUB
+            </Typography>
+            <IconButton onClick={toggleTheme} color="inherit">
+              {isDarkMode ? <Brightness7Icon /> : <Brightness4Icon />}
+            </IconButton>
+          </Box>
+      
+          <Button 
+            variant="contained" 
+            color="secondary" 
+            startIcon={loginLoading && !activeProfileId ? <CircularProgress size={20} color="inherit" /> : <LoginIcon />}
+            onClick={() => setOpenLoginDialog(true)}
+            disabled={loginLoading || loading || profiles.length === 0}
+          >
+            {loginLoading && !activeProfileId ? 'Logging in...' : 'Login Bot '}
+          </Button>
+        </Box>
+      <Typography variant="h6" sx={{ 
+        fontWeight: 'bold', 
+        fontFamily: 'Orbitron, sans-serif',
+        background: 'linear-gradient(45deg, #FF0000, #FF7300, #FFFB00, #48FF00, #00FFD5, #002BFF, #7A00FF, #FF00C8, #FF0000)',
+        backgroundSize: '400% 400%',
+        animation: `${rgbAnimation} 3s ease infinite`,
+        WebkitBackgroundClip: 'text',
+        WebkitTextFillColor: 'transparent',
+        textShadow: '0px 0px 8px rgba(255, 255, 255, 0.3)', // Glow effect
+        display: 'inline-block'
+      }}>
         By Handsome Jom
       </Typography>
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
@@ -470,7 +615,7 @@ test('My Test', async ({ page }) => {
 
       {/* --- Tab 1: Run Scripts --- */}
       {tabValue === 0 && (
-        <Paper variant="outlined" sx={{ p: 2, bgcolor: '#f5f5f5' }}>
+        <Paper variant="outlined" sx={{ p: 2, bgcolor: 'background.paper' }}>
           <Typography variant="h6" gutterBottom>Ready to Execute</Typography>
 
           {sortedProfiles.map(profile => {
@@ -607,8 +752,18 @@ test('My Test', async ({ page }) => {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
-            <Button variant="contained" startIcon={<AddIcon />} onClick={handleOpenAddScriptDialog} sx={{ whiteSpace: 'nowrap' }}>
-              Add New Script
+            <Button variant="contained" startIcon={<AddIcon />} onClick={handleOpenAddScriptDialog} sx={{ whiteSpace: 'nowrap',px:2 }}>
+              Add Script
+            </Button>
+            <Button 
+                variant="contained" 
+                color="error" 
+                startIcon={isRecording ? <CircularProgress size={20} color="inherit" /> : <FiberManualRecordIcon />} 
+                onClick={handleOpenRecordDialog} 
+                disabled={isRecording}
+                sx={{ whiteSpace: 'nowrap', bgcolor: '#ff1744', '&:hover': { bgcolor: '#d50000' } }}
+            >
+              {isRecording ? 'Recording...' : 'Record'}
             </Button>
           </Box>
           <List>
@@ -654,7 +809,7 @@ test('My Test', async ({ page }) => {
                   variant="outlined"
                   sx={{
                     height: '100%',
-                    bgcolor: profile.isFavorite ? '#fffbf2' : 'white',
+                    bgcolor: profile.isFavorite ? (isDarkMode ? 'rgba(255, 193, 7, 0.08)' : '#fffbf2') : 'background.paper',
                     borderColor: profile.isFavorite ? '#ffc107' : undefined,
                     transition: 'all 0.2s',
                     '&:hover': { transform: 'translateY(-4px)', boxShadow: 3 }
@@ -774,26 +929,7 @@ test('My Test', async ({ page }) => {
                   />
                 </Box>
 
-                <Divider textAlign="left">CUSTOM VARIABLES</Divider>
 
-                {Object.entries(editingProfile.variables)
-                  .filter(([key]) => !['BASE_URL', 'TEST_USER', 'TEST_PASS'].includes(key))
-                  .map(([key, val], vIndex) => (
-                    <Box key={vIndex} sx={{ display: 'flex', gap: 2 }}>
-                      <TextField
-                        label="Key" size="small" value={key}
-                        onChange={(e) => handleUpdateProfileVar(e.target.value, val, key)}
-                      />
-                      <TextField
-                        label="Value" size="small" fullWidth value={val}
-                        onChange={(e) => handleUpdateProfileVar(key, e.target.value)}
-                      />
-                      <IconButton size="small" onClick={() => handleDeleteProfileVar(key)}><DeleteIcon /></IconButton>
-                    </Box>
-                  ))}
-                <Button startIcon={<AddIcon />} sx={{ alignSelf: 'flex-start' }}
-                  onClick={() => handleUpdateProfileVar('NEW_VAR', '')}
-                >Add Custom Variable</Button>
 
                 <Divider />
 
@@ -862,6 +998,56 @@ test('My Test', async ({ page }) => {
         </DialogActions>
       </Dialog>
 
+      {/* --- DIALOG: Magic Recorder Setup --- */}
+      <Dialog open={openRecordDialog} onClose={() => setOpenRecordDialog(false)}>
+        <DialogTitle>🔴 Magic Recorder Setup</DialogTitle>
+        <DialogContent sx={{ minWidth: 350, pt: 1 }}>
+          <Typography variant="body2" sx={{ mb: 2 }}>
+            This will launch a new browser window. Actions you perform will be recorded automatically.
+          </Typography>
+
+          <Stack spacing={2}>
+             <FormControl fullWidth size="small">
+                <InputLabel>Record As Profile (Optional)</InputLabel>
+                <Select 
+                   value={recordTargetEnvId} 
+                   label="Record As Profile (Optional)" 
+                   onChange={(e) => {
+                      const id = e.target.value;
+                      setRecordTargetEnvId(id);
+                      const p = profiles.find(p => p.id === id);
+                      if(p && p.variables['BASE_URL']) setRecordStartUrl(p.variables['BASE_URL']);
+                   }}
+                >
+                   <MenuItem value=""><em>None (Clean Session)</em></MenuItem>
+                   {profiles.map((p) => <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>)}
+                </Select>
+             </FormControl>
+
+             <TextField 
+                label="Start URL" 
+                size="small" 
+                fullWidth 
+                value={recordStartUrl} 
+                onChange={(e) => setRecordStartUrl(e.target.value)}
+                placeholder="https://example.com"
+                helperText="Optional: The browser will open directly to this URL."
+             />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenRecordDialog(false)}>Cancel</Button>
+          <Button 
+             variant="contained" 
+             color="error"
+             startIcon={<FiberManualRecordIcon />}
+             onClick={handleStartRecording}
+          >
+             Start Recording
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Loading Backdrop for Headless Login */}
       <Backdrop
         sx={{ color: '#fff', zIndex: (theme) => theme.zIndex.drawer + 1, flexDirection: 'column', gap: 2 }}
@@ -871,7 +1057,68 @@ test('My Test', async ({ page }) => {
         <Typography variant="h6">Logging in...</Typography>
         <Typography variant="body2">Please wait while we authenticate</Typography>
       </Backdrop>
+
+      {/* --- LIVE TERMINAL DRAWER --- */}
+      <Paper 
+        elevation={10}
+        sx={{
+            position: 'fixed',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: terminalOpen ? 300 : 40,
+            transition: 'height 0.3s ease',
+            bgcolor: '#1e1e1e',
+            color: '#33ff00',
+            fontFamily: 'monospace',
+            zIndex: 1300,
+            display: 'flex',
+            flexDirection: 'column',
+            borderTop: '2px solid #333'
+        }}
+      >
+        {/* Terminal Header */}
+        <Box 
+            onClick={() => setTerminalOpen(!terminalOpen)}
+            sx={{ 
+                p: 1, 
+                px: 2, 
+                cursor: 'pointer', 
+                bgcolor: '#252526', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'space-between',
+                '&:hover': { bgcolor: '#2d2d2d' }
+            }}
+        >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <TerminalIcon fontSize="small" />
+                <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>LIVE TERMINAL</Typography>
+                {logs.length > 0 && <Chip label={`${logs.length} lines`} size="small" sx={{ height: 16, fontSize: '0.6rem', bgcolor: '#333', color: '#fff' }} />}
+            </Box>
+            {terminalOpen ? <KeyboardArrowDownIcon /> : <KeyboardArrowUpIcon />}
+        </Box>
+
+        {/* Terminal Content */}
+        {terminalOpen && (
+            <Box sx={{ flex: 1, overflowY: 'auto', p: 2, fontSize: '0.85rem' }}>
+                {logs.length === 0 ? (
+                    <Typography variant="caption" sx={{ color: '#666' }}>Waiting for logs...</Typography>
+                ) : (
+                    logs.map((line, i) => (
+                        <div key={i} style={{ whiteSpace: 'pre-wrap', marginBottom: '2px' }}>
+                            <span style={{ color: '#555', marginRight: '8px', userSelect: 'none' }}>[{i+1}]</span>
+                            {line}
+                        </div>
+                    ))
+                )}
+                <div ref={terminalEndRef} />
+            </Box>
+        )}
+      </Paper>
+
     </Container>
+    </ThemeProvider>
   );
 }
 import { createRoot } from 'react-dom/client';

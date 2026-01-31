@@ -19,8 +19,8 @@ declare const MAIN_WINDOW_VITE_NAME: string;
 const createWindow = () => {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
-    width: 800,
-    height: 600,
+    width: 1300,
+    height: 1000,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
     },
@@ -36,7 +36,7 @@ const createWindow = () => {
   }
 
   // Open the DevTools.
-  mainWindow.webContents.openDevTools();
+  // mainWindow.webContents.openDevTools();
 };
 
 // This method will be called when Electron has finished
@@ -105,7 +105,7 @@ const writeJson = (filePath: string, data: any) => {
 };
 
 // --- Session Expiration Helpers ---
-const SESSION_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+const SESSION_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 
 const getSessionMeta = (): { [envId: string]: number } => {
   if (!fs.existsSync(SESSION_META_PATH)) return {};
@@ -191,20 +191,24 @@ ipcMain.handle(
       // -----------------------------------------
 
       // 2. Construct command
-      let command = "";
+      let commandLine = "";
       if (isSetup) {
-        command = `npx playwright test --project=setup`;
+        commandLine = `npx playwright test --project=setup`;
       } else {
-        // Convert backslashes to forward slashes for Playwright
         const normalizedPath = fileName
           ? `tests/bot-scripts/${fileName}`.replace(/\\/g, "/")
           : "";
-        command = normalizedPath
-          ? `npx playwright test "${normalizedPath}" --project=${projectName}`
-          : `npx playwright test --project=${projectName}`;
+        commandLine = `npx playwright test ${normalizedPath} --project=ba-tests --headed`;
       }
 
-      console.log(`Executing: ${command}`);
+      // Add Headless flag if requested
+      if (headless) {
+         // Actually, my previous logic forced --headed.
+         // Let's rewrite strictly:
+         if (commandLine.includes("--headed")) {
+            commandLine = commandLine.replace("--headed", "");
+         }
+      }
 
       // Get Start URL from metadata if fileName is provided
       let startUrl = "";
@@ -226,22 +230,45 @@ ipcMain.handle(
         HEADLESS_MODE: headless ? "true" : "false", // Control headless mode via env var
       };
 
-      exec(
-        command,
-        {
-          env: envWithSession, // Inject Profile variables + Session Path
-          cwd: app.getAppPath(),
-        },
-        (error, stdout, stderr) => {
-          // Save timestamp on successful login
-          if (!error && isSetup) {
-            console.log("✅ Login successful. Saving session timestamp.");
-            saveSessionMeta(envId, Date.now());
-          }
+      console.log(`Executing: ${commandLine}`);
+      event.sender.send('playwright-log', `\n> ${commandLine}\n`); // Echo command
 
-          resolve({ success: !error, log: stdout || stderr });
-        },
-      );
+      // 3. EXECUTE with Streaming
+      const child = exec(commandLine, { env: envWithSession, cwd: app.getAppPath() });
+
+      let fullLog = "";
+
+      // Stream stdout
+      child.stdout?.on('data', (data) => {
+        const text = data.toString();
+        fullLog += text;
+        event.sender.send('playwright-log', text);
+      });
+
+      // Stream stderr
+      child.stderr?.on('data', (data) => {
+        const text = data.toString();
+        fullLog += text;
+        event.sender.send('playwright-log', text);
+      });
+
+      // Handle Exit
+      child.on('close', (code) => {
+        // Save timestamp on successful login
+        if (code === 0 && isSetup) {
+           console.log("✅ Login successful. Saving session timestamp.");
+           saveSessionMeta(envId, Date.now());
+        }
+
+        resolve({ success: code === 0, log: fullLog });
+      });
+      
+      child.on('error', (err) => {
+         const errText = `Failed to start process: ${err.message}`;
+         fullLog += errText;
+         event.sender.send('playwright-log', errText);
+         resolve({ success: false, log: fullLog });
+      });
     });
   },
 );
@@ -390,4 +417,59 @@ ipcMain.handle("get-envs", async () => {
 ipcMain.handle("save-envs", async (event, envs) => {
   writeJson(ENVS_PATH, envs);
   return { success: true };
+});
+
+// --- Magic Recorder ---
+ipcMain.handle("record-script", async (event, { envId, url }) => {
+  return new Promise((resolve) => {
+    // 1. Determine Session
+    const sessionPath = getSessionPath(envId);
+    const hasSession = fs.existsSync(sessionPath);
+
+    // 2. Prepare Temp Output File
+    const tempFile = path.join(app.getAppPath(), `temp_record_${Date.now()}.ts`);
+
+    // 3. Construct Command
+    let command = `npx playwright codegen -o "${tempFile}"`;
+    
+    if (hasSession) {
+      console.log(`Recorder: Loading session from ${sessionPath}`);
+      command += ` --load-storage="${sessionPath}"`;
+    }
+
+    if (url) {
+      command += ` "${url}"`;
+    }
+
+    console.log(`Recorder Executing: ${command}`);
+
+    // 4. Run Codegen
+    exec(command, { cwd: app.getAppPath(), env: process.env }, (error, stdout, stderr) => {
+      if (error) {
+        console.error("Recorder Error:", error);
+        // Don't return yet, sometimes codegen exits with code but still produces output? 
+        // Actually playwright codegen usually exits cleanly.
+        // If error code is present, it might be command not found.
+      }
+
+      // 5. On Close: Read the file
+      if (fs.existsSync(tempFile)) {
+        try {
+          const content = fs.readFileSync(tempFile, 'utf-8');
+          fs.unlinkSync(tempFile); // Cleanup
+          resolve({ success: true, content });
+        } catch (readError: any) {
+          resolve({ success: false, content: '', error: `Failed to read recording: ${readError.message}` });
+        }
+      } else {
+        // User closed without generating file or error
+        // Check if there was an exec error
+        if (error) {
+           resolve({ success: false, content: '', error: `Process Error: ${error.message} \n ${stderr}` });
+        } else {
+           resolve({ success: false, content: '', error: 'No recording generated (or closed instantly).' });
+        }
+      }
+    });
+  });
 });
