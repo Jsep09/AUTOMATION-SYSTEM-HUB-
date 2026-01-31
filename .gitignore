@@ -57,9 +57,10 @@ typings/
 # Yarn Integrity file
 .yarn-integrity
 
-# dotenv environment variables file
+# dotenv environment variables file (Strict)
 .env
-.env.test
+.env.*
+!.env.example
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache
@@ -93,12 +94,17 @@ out/
 
 # --- App Specific ---
 
-# Playwright & Auth Sessions
-playwright/.auth/
+# Playwright & Auth Sessions (Sensitive data)
+playwright/.auth/**
 test-results/
 playwright-report/
+blob-report/
+playwright-report/
+test-results/
 
 # User Generated (Bot Scripts & Profiles)
-# tests/bot-scripts/*.spec.ts
 tests/bot-scripts/metadata.json
 tests/bot-scripts/envs.json
+tests/bot-scripts/*.json
+tests/bot-scripts/*.spec.ts
+
