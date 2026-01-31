@@ -4,7 +4,8 @@ import {
   TextField, Select, MenuItem, InputLabel, FormControl,
   List, ListItem, ListItemText, IconButton, Chip, Stack,
   Dialog, DialogTitle, DialogContent, DialogActions, Alert,
-  CircularProgress, Card, CardContent, Divider, Grid, CardActionArea
+  CircularProgress, Card, CardContent, Divider, Grid, CardActionArea,
+  Backdrop, FormControlLabel, Checkbox
 } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import AddIcon from '@mui/icons-material/Add';
@@ -22,6 +23,8 @@ import StarIcon from '@mui/icons-material/Star';
 import StarBorderIcon from '@mui/icons-material/StarBorder';
 import EditIcon from '@mui/icons-material/Edit';
 import CloseIcon from '@mui/icons-material/Close';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import ErrorIcon from '@mui/icons-material/Error';
 import { Toaster, toast } from 'sonner';
 
 // Interface matching the new backend structure
@@ -31,22 +34,26 @@ interface Profile {
   variables: { [key: string]: string };
   isLoggedIn?: boolean;
   isFavorite?: boolean;
+  expiresIn?: number; // Milliseconds until session expires
+  loginTime?: number; // Timestamp of login
+  headless?: boolean; // Per-profile headless mode setting
 }
 
 interface Script {
   name: string;
   category: string;
+  startUrl?: string; // Optional custom start URL
 }
 
 interface ElectronAPI {
-  runTest: (data: { fileName?: string; projectName?: string; envId?: string }) => Promise<{ success: boolean; log: string }>;
-  saveScript: (data: { fileName: string; content: string; category: string }) => Promise<{ success: boolean }>;
+  runTest: (data: { fileName?: string; projectName?: string; envId?: string; headless?: boolean }) => Promise<{ success: boolean; log: string }>;
+  saveScript: (data: { fileName: string; content: string; category: string; startUrl?: string }) => Promise<{ success: boolean }>;
   readScript: (fileName: string) => Promise<{ success: boolean; content: string }>;
   deleteScript: (fileName: string) => Promise<{ success: boolean }>;
   getScripts: () => Promise<Script[]>;
   getEnvs: () => Promise<Profile[]>;
   saveEnvs: (envs: Profile[]) => Promise<{ success: boolean }>;
-  getSessionStatus: (envId: string) => Promise<{ isLoggedIn: boolean }>;
+  getSessionStatus: (envId: string) => Promise<{ isLoggedIn: boolean; expiresIn: number; loginTime: number | null }>;
   logout: (envId: string) => Promise<{ success: boolean }>;
 }
 
@@ -75,16 +82,45 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
+  const [scriptStatuses, setScriptStatuses] = useState<Record<string, 'idle' | 'running' | 'success' | 'error'>>({});
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Forms
-  const [newScript, setNewScript] = useState({ name: '', envId: '', content: '' });
+  const defaultScriptTemplate = `import { test, expect } from '@playwright/test';
+
+test('My Test', async ({ page }) => {
+  // Use START_URL if set (from metadata), otherwise fall back to BASE_URL
+  const startUrl = process.env.START_URL || process.env.BASE_URL || "/";
+  await page.goto(startUrl);
+  
+  // Your test code here
+  
+});`;
+  const [newScript, setNewScript] = useState({ name: '', envId: '', content: defaultScriptTemplate, startUrl: '' });
   const [editingScriptOriginalName, setEditingScriptOriginalName] = useState<string | null>(null);
   const [selectedLoginEnvId, setSelectedLoginEnvId] = useState('');
 
   // Initial Load
   useEffect(() => {
     loadData();
-  }, []);
+
+    // Update session status every second for real-time countdown
+    // But pause when editing scripts or login dialog to avoid resetting form state
+    const interval = setInterval(() => {
+      if (!openAddScript && !openLoginDialog) {
+        fetchProfiles();
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [openAddScript, openLoginDialog]);
+
+  // Auto-select first profile when login dialog opens if no profile selected
+  useEffect(() => {
+    if (openLoginDialog && !selectedLoginEnvId && profiles.length > 0) {
+      setSelectedLoginEnvId(profiles[0].id);
+    }
+  }, [openLoginDialog, profiles]);
 
   const loadData = async () => {
     await Promise.all([fetchProfiles(), fetchScripts()]);
@@ -105,7 +141,7 @@ export default function Dashboard() {
       let loadedProfiles = await window.electronAPI.getEnvs();
       const profilesWithStatus = await Promise.all(loadedProfiles.map(async (p) => {
         const status = await window.electronAPI.getSessionStatus(p.id);
-        return { ...p, isLoggedIn: status.isLoggedIn };
+        return { ...p, isLoggedIn: status.isLoggedIn, expiresIn: status.expiresIn, loginTime: status.loginTime };
       }));
       setProfiles(profilesWithStatus);
 
@@ -122,16 +158,21 @@ export default function Dashboard() {
   // --- Run Scripts ---
   const handleRunScript = async (script: Script) => {
     const profile = profiles.find(p => p.id === script.category);
-    setLoading(true);
+
+    // Set status to running for this specific script
+    setScriptStatuses(prev => ({ ...prev, [script.name]: 'running' }));
+
     try {
       console.log(`Running ${script.name} with Profile: ${profile?.name}`);
       const result = await window.electronAPI.runTest({
         fileName: script.name,
         projectName: 'ba-tests',
-        envId: script.category
+        envId: script.category,
+        headless: profile?.headless || false // Use per-profile headless setting
       });
 
       if (!result.success && result.log === "MISSING_SESSION_ERROR") {
+        setScriptStatuses(prev => ({ ...prev, [script.name]: 'error' }));
         toast.error(`Authentication Missing for profile "${profile?.name || 'Unknown'}"!`, {
           description: "You must Login first before running scripts.",
           action: {
@@ -142,22 +183,35 @@ export default function Dashboard() {
             }
           }
         });
+      } else if (!result.success && result.log === "SESSION_EXPIRED_ERROR") {
+        setScriptStatuses(prev => ({ ...prev, [script.name]: 'error' }));
+        toast.error(`Session Expired for profile "${profile?.name || 'Unknown'}"!`, {
+          description: "Your session has expired (> 5 minutes). Please login again.",
+          action: {
+            label: 'Login Now',
+            onClick: () => {
+              if (profile) setSelectedLoginEnvId(profile.id || '');
+              setOpenLoginDialog(true);
+            }
+          }
+        });
       } else {
         if (result.success) {
-          toast.success("Execution Finished Successfully!", {
-            description: "Script execution completed without errors."
+          setScriptStatuses(prev => ({ ...prev, [script.name]: 'success' }));
+          toast.success(`"${script.name}" Finished!`, {
+            description: "Execution completed successfully."
           });
         } else {
-          toast.error("Execution Failed", {
+          setScriptStatuses(prev => ({ ...prev, [script.name]: 'error' }));
+          toast.error(`"${script.name}" Failed`, {
             description: result.log,
             duration: 5000
           });
         }
       }
     } catch (error: any) {
+      setScriptStatuses(prev => ({ ...prev, [script.name]: 'error' }));
       toast.error(`Error running script: ${error.message || error}`);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -223,7 +277,8 @@ export default function Dashboard() {
         setNewScript({
           name: cleanName,
           envId: script.category,
-          content: result.content
+          content: result.content,
+          startUrl: script.startUrl || '' // Load existing start URL
         });
         setEditingScriptOriginalName(script.name);
         setOpenAddScript(true);
@@ -252,10 +307,14 @@ export default function Dashboard() {
       await window.electronAPI.saveScript({
         fileName: newScript.name,
         category: newScript.envId,
-        content: newScript.content
+        content: newScript.content,
+        startUrl: newScript.startUrl // Pass start URL to backend
       });
       setOpenAddScript(false);
-      setNewScript({ name: '', envId: profiles[0]?.id || '', content: '' });
+
+      // Reset with valid envId
+      const validEnvId = profiles.length > 0 ? profiles[0].id : '';
+      setNewScript({ name: '', envId: validEnvId, content: defaultScriptTemplate, startUrl: '' });
       setEditingScriptOriginalName(null);
       await fetchScripts();
       toast.success("Script saved successfully!");
@@ -414,20 +473,63 @@ export default function Dashboard() {
                     {profile.isLoggedIn ? (
                       <Chip label="Ready" color="success" size="small" sx={{ ml: 1, height: 20 }} />
                     ) : (
-                      <Chip label="Login Req" color="error" size="small" sx={{ ml: 1, height: 20 }} />
+                      <Button
+                        variant="contained"
+                        color="error"
+                        size="small"
+                        startIcon={<LoginIcon sx={{ fontSize: 16 }} />}
+                        sx={{ ml: 1, height: 24, fontSize: '0.75rem', textTransform: 'none' }}
+                        onClick={(e) => {
+                          e.stopPropagation(); // Prevent accordion toggle
+                          handleLogin(profile.id);
+                        }}
+                      >
+                        Login Required
+                      </Button>
                     )}
                   </Box>
                 </AccordionSummary>
                 <AccordionDetails>
+                  <Box sx={{ mb: 2 }}>
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={profile.headless || false}
+                          onChange={async (e) => {
+                            // Update profile headless setting
+                            const updatedProfiles = profiles.map(p =>
+                              p.id === profile.id ? { ...p, headless: e.target.checked } : p
+                            );
+                            setProfiles(updatedProfiles);
+
+                            // Save to backend
+                            const profilesToSave = updatedProfiles.map(({ isLoggedIn, expiresIn, loginTime, ...rest }) => rest);
+                            await window.electronAPI.saveEnvs(profilesToSave);
+                          }}
+                          size="small"
+                        />
+                      }
+                      label="Headless Mode (no browser window)"
+                    />
+                  </Box>
                   <List disablePadding>
                     {profileScripts.map((script, idx) => (
                       <ListItem key={idx} divider secondaryAction={
-                        <Button
-                          variant="contained" color="success" size="small" startIcon={<PlayArrowIcon />}
-                          onClick={() => handleRunScript(script)} disabled={loading || loginLoading}
-                        >
-                          Run
-                        </Button>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          {scriptStatuses[script.name] === 'success' && <Chip label="Done" color="success" size="small" variant="outlined" icon={<CheckCircleIcon />} />}
+                          {scriptStatuses[script.name] === 'error' && <Chip label="Failed" color="error" size="small" variant="outlined" icon={<ErrorIcon />} />}
+
+                          <Button
+                            variant="contained"
+                            color={scriptStatuses[script.name] === 'running' ? "secondary" : "success"}
+                            size="small"
+                            startIcon={scriptStatuses[script.name] === 'running' ? <CircularProgress size={20} color="inherit" /> : <PlayArrowIcon />}
+                            onClick={() => handleRunScript(script)}
+                            disabled={scriptStatuses[script.name] === 'running' || loginLoading}
+                          >
+                            {scriptStatuses[script.name] === 'running' ? 'Running...' : 'Run'}
+                          </Button>
+                        </Box>
                       }>
                         <ListItemText primary={script.name} />
                       </ListItem>
@@ -446,12 +548,16 @@ export default function Dashboard() {
                 <List>
                   {scripts.filter(s => !profiles.find(p => p.id === s.category)).map((s, i) => (
                     <ListItem key={i} secondaryAction={
-                      <Box sx={{ display: 'flex', gap: 1 }}>
+                      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                        {scriptStatuses[s.name] === 'success' && <CheckCircleIcon color="success" />}
+                        {scriptStatuses[s.name] === 'error' && <ErrorIcon color="error" />}
                         <Button
-                          variant="contained" color="warning" size="small" startIcon={<PlayArrowIcon />}
-                          onClick={() => handleRunUnassigned(s)} disabled={loading || loginLoading}
+                          variant="contained" color="warning" size="small"
+                          startIcon={scriptStatuses[s.name] === 'running' ? <CircularProgress size={20} color="inherit" /> : <PlayArrowIcon />}
+                          onClick={() => handleRunUnassigned(s)}
+                          disabled={scriptStatuses[s.name] === 'running' || loginLoading}
                         >
-                          Run
+                          {scriptStatuses[s.name] === 'running' ? 'Running' : 'Run'}
                         </Button>
                         <IconButton color="primary" onClick={() => handleEditScript(s)} aria-label="edit">
                           <EditIcon />
@@ -478,9 +584,21 @@ export default function Dashboard() {
       {/* --- Tab 2: Manage Scripts --- */}
       {tabValue === 1 && (
         <Box>
-          <Button variant="contained" startIcon={<AddIcon />} onClick={() => setOpenAddScript(true)}>Add New Script</Button>
-          <List sx={{ mt: 2 }}>
-            {scripts.map((script, index) => {
+          <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+            <TextField
+              label="Search Scripts"
+              variant="outlined"
+              size="small"
+              fullWidth
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+            <Button variant="contained" startIcon={<AddIcon />} onClick={() => setOpenAddScript(true)} sx={{ whiteSpace: 'nowrap' }}>
+              Add New Script
+            </Button>
+          </Box>
+          <List>
+            {scripts.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase())).map((script, index) => {
               const profile = profiles.find(p => p.id === script.category);
               return (
                 <ListItem key={index} divider secondaryAction={
@@ -536,9 +654,19 @@ export default function Dashboard() {
                       </Typography>
                     </Box>
 
-                    <Box sx={{ mt: 'auto', display: 'flex', gap: 1 }}>
+                    <Box sx={{ mt: 'auto', display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                       {profile.isLoggedIn ? (
-                        <Chip label="Loged In" color="success" size="small" />
+                        <>
+                          <Chip label="Logged In" color="success" size="small" />
+                          {profile.expiresIn !== undefined && profile.expiresIn > 0 && (
+                            <Chip
+                              label={`${Math.floor(profile.expiresIn / 60000)}:${String(Math.floor((profile.expiresIn % 60000) / 1000)).padStart(2, '0')}`}
+                              color={profile.expiresIn < 60000 ? 'error' : profile.expiresIn < 180000 ? 'warning' : 'success'}
+                              size="small"
+                              variant="outlined"
+                            />
+                          )}
+                        </>
                       ) : (
                         <Chip label="Not Logged In" size="small" variant="outlined" />
                       )}
@@ -565,6 +693,14 @@ export default function Dashboard() {
                 {profiles.map((p) => <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>)}
               </Select>
             </FormControl>
+            <TextField
+              label="Start URL (Optional)"
+              value={newScript.startUrl}
+              onChange={(e) => setNewScript({ ...newScript, startUrl: e.target.value })}
+              fullWidth
+              placeholder="e.g., https://example.com/tracking/123"
+              helperText="Leave empty to use BASE_URL from profile"
+            />
             <TextField label="Script Content" multiline rows={15} value={newScript.content} onChange={(e) => setNewScript({ ...newScript, content: e.target.value })} fullWidth />
           </Stack>
         </DialogContent>
@@ -671,6 +807,9 @@ export default function Dashboard() {
           <Typography variant="body2" sx={{ mb: 2 }}>
             Which environment profile do you want to authenticate with?
           </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
+            {profiles.length} profile(s) available
+          </Typography>
           <FormControl fullWidth>
             <InputLabel>Profile</InputLabel>
             <Select value={selectedLoginEnvId} label="Profile" onChange={(e) => setSelectedLoginEnvId(e.target.value)}>
@@ -708,6 +847,16 @@ export default function Dashboard() {
           <Button onClick={() => setRunScriptTarget(null)}>Cancel</Button>
         </DialogActions>
       </Dialog>
+
+      {/* Loading Backdrop for Headless Login */}
+      <Backdrop
+        sx={{ color: '#fff', zIndex: (theme) => theme.zIndex.drawer + 1, flexDirection: 'column', gap: 2 }}
+        open={loginLoading}
+      >
+        <CircularProgress color="inherit" size={60} />
+        <Typography variant="h6">Logging in...</Typography>
+        <Typography variant="body2">Please wait while we authenticate</Typography>
+      </Backdrop>
     </Container>
   );
 }

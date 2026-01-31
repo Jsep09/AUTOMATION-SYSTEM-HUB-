@@ -11,8 +11,8 @@ export default defineConfig({
   reporter: "html",
   use: {
     // Base URL will be overridden by the process.env passed from Main
-    baseURL: process.env.BASE_URL, 
-    headless: false,
+    baseURL: process.env.BASE_URL,
+    headless: process.env.HEADLESS_MODE === "true",
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
   },
@@ -25,6 +25,7 @@ export default defineConfig({
       testDir: "./tests/auth-setup",
       use: {
         storageState: undefined, // Do not load existing session for login
+        headless: true, // Run login in headless mode (no browser window)
       },
     },
     // 2. BA Tests (Run Scripts)

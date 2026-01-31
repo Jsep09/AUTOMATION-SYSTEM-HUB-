@@ -1,16 +1,16 @@
 // เพิ่ม import ที่จำเป็นด้านบน
-import { app, BrowserWindow, ipcMain } from 'electron';
-import { exec } from 'child_process';
-import * as fs from 'fs';
-import * as path from 'path';
+import { app, BrowserWindow, ipcMain } from "electron";
+import { exec } from "child_process";
+import * as fs from "fs";
+import * as path from "path";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 try {
-  if (require('electron-squirrel-startup')) {
+  if (require("electron-squirrel-startup")) {
     app.quit();
   }
 } catch (e) {
-  console.log('Squirrel startup check skipped:', e);
+  console.log("Squirrel startup check skipped:", e);
 }
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string;
@@ -22,7 +22,7 @@ const createWindow = () => {
     width: 800,
     height: 600,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, "preload.js"),
     },
   });
 
@@ -30,7 +30,9 @@ const createWindow = () => {
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
   } else {
-    mainWindow.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`));
+    mainWindow.loadFile(
+      path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`),
+    );
   }
 
   // Open the DevTools.
@@ -40,18 +42,18 @@ const createWindow = () => {
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.on('ready', createWindow);
+app.on("ready", createWindow);
 
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits
 // explicitly with Cmd + Q.
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") {
     app.quit();
   }
 });
 
-app.on('activate', () => {
+app.on("activate", () => {
   // On OS X it's common to re-create a window in the app when the
   // dock icon is clicked and there are no other windows open.
   if (BrowserWindow.getAllWindows().length === 0) {
@@ -61,29 +63,37 @@ app.on('activate', () => {
 
 // --- 1. Helper: Paths & Data Access ---
 // --- 1. Helper: Paths & Data Access ---
-const SCRIPTS_DIR = path.join(app.getAppPath(), 'tests', 'bot-scripts');
-const METADATA_PATH = path.join(SCRIPTS_DIR, 'metadata.json');
-const ENVS_PATH = path.join(SCRIPTS_DIR, 'envs.json');
+const SCRIPTS_DIR = path.join(app.getAppPath(), "tests", "bot-scripts");
+const METADATA_PATH = path.join(SCRIPTS_DIR, "metadata.json");
+const ENVS_PATH = path.join(SCRIPTS_DIR, "envs.json");
+const SESSION_META_PATH = path.join(
+  app.getAppPath(),
+  "playwright",
+  ".auth",
+  ".session-meta.json",
+);
 
 const ensureDir = () => {
-  if (!fs.existsSync(SCRIPTS_DIR)) fs.mkdirSync(SCRIPTS_DIR, { recursive: true });
+  if (!fs.existsSync(SCRIPTS_DIR))
+    fs.mkdirSync(SCRIPTS_DIR, { recursive: true });
 };
 
 const getSessionPath = (envId: string) => {
   // Store sessions in a dedicated folder
-  const SESSION_DIR = path.join(app.getAppPath(), 'playwright', '.auth');
-  if (!fs.existsSync(SESSION_DIR)) fs.mkdirSync(SESSION_DIR, { recursive: true });
-  
+  const SESSION_DIR = path.join(app.getAppPath(), "playwright", ".auth");
+  if (!fs.existsSync(SESSION_DIR))
+    fs.mkdirSync(SESSION_DIR, { recursive: true });
+
   // If no envId provided (or legacy), use default user.json
-  if (!envId) return path.join(SESSION_DIR, 'user.json');
-  
+  if (!envId) return path.join(SESSION_DIR, "user.json");
+
   return path.join(SESSION_DIR, `session_${envId}.json`);
 };
 
 const readJson = (filePath: string, defaultValue: any) => {
   if (!fs.existsSync(filePath)) return defaultValue;
   try {
-    return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    return JSON.parse(fs.readFileSync(filePath, "utf-8"));
   } catch (e) {
     return defaultValue;
   }
@@ -94,76 +104,177 @@ const writeJson = (filePath: string, data: any) => {
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
 };
 
+// --- Session Expiration Helpers ---
+const SESSION_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+
+const getSessionMeta = (): { [envId: string]: number } => {
+  if (!fs.existsSync(SESSION_META_PATH)) return {};
+  try {
+    return JSON.parse(fs.readFileSync(SESSION_META_PATH, "utf-8"));
+  } catch (e) {
+    return {};
+  }
+};
+
+const saveSessionMeta = (envId: string, timestamp: number) => {
+  const meta = getSessionMeta();
+  meta[envId] = timestamp;
+  const dir = path.dirname(SESSION_META_PATH);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(SESSION_META_PATH, JSON.stringify(meta, null, 2));
+};
+
+const isSessionExpired = (envId: string): boolean => {
+  const meta = getSessionMeta();
+  const loginTime = meta[envId];
+  if (!loginTime) return true; // No login record = expired
+
+  const now = Date.now();
+  const elapsed = now - loginTime;
+  return elapsed > SESSION_TIMEOUT_MS;
+};
+
+const deleteExpiredSession = (envId: string) => {
+  const sessionPath = getSessionPath(envId);
+  if (fs.existsSync(sessionPath)) {
+    fs.unlinkSync(sessionPath);
+  }
+
+  // Remove from metadata
+  const meta = getSessionMeta();
+  delete meta[envId];
+  fs.writeFileSync(SESSION_META_PATH, JSON.stringify(meta, null, 2));
+};
+
 // --- 2. IPC Handlers ---
 
 // Run Playwright
-ipcMain.handle('run-playwright', async (event, { fileName, projectName, envId }) => {
-  return new Promise((resolve) => {
-    // 1. Get Environment Variables for the specific Env ID
-    const profiles = readJson(ENVS_PATH, []);
-    const profile = profiles.find((p: any) => p.id === envId);
-    
-    // Default to empty if not found, or use the found profile's variables
-    const envVars = profile ? profile.variables : {};
+ipcMain.handle(
+  "run-playwright",
+  async (event, { fileName, projectName, envId, headless }) => {
+    return new Promise((resolve) => {
+      // 1. Get Environment Variables for the specific Env ID
+      const profiles = readJson(ENVS_PATH, []);
+      const profile = profiles.find((p: any) => p.id === envId);
 
-    console.log(`Using Environment Profile: ${profile ? profile.name : 'None'} (${envId})`);
+      // Default to empty if not found, or use the found profile's variables
+      const envVars = profile ? profile.variables : {};
 
-    // Determine Session Path
-    const sessionPath = getSessionPath(envId);
-    console.log(`Session Path: ${sessionPath}`);
+      console.log(
+        `Using Environment Profile: ${profile ? profile.name : "None"} (${envId})`,
+      );
 
-    // --- CHECK SESSION BEFORE RUNNING TEST ---
-    const isSetup = projectName === 'setup';
-    
-    if (!isSetup && !fs.existsSync(sessionPath)) {
-      console.log('❌ Session file not found. Blocking execution.');
-      return resolve({ 
-        success: false, 
-        log: "MISSING_SESSION_ERROR" // Special code for Frontend to handle
-      });
-    }
-    // -----------------------------------------
+      // Determine Session Path
+      const sessionPath = getSessionPath(envId);
+      console.log(`Session Path: ${sessionPath}`);
 
-    // 2. Construct command
-    let command;
-    const projectFlag = projectName ? `--project=${projectName}` : '--project=ba-tests';
-    
-    if (fileName) {
-        // Run specific script
-        // FIX: Use forward slashes for Playwright to avoid Regex issues on Windows
-        const scriptPath = `tests/bot-scripts/${fileName}`;
-        command = `npx playwright test "${scriptPath}" ${projectFlag}`;
-    } else {
-        // Run all (or setup)
-        command = `npx playwright test ${projectFlag}`;
-    }
-    
-    console.log(`Executing: ${command}`);
+      // --- CHECK SESSION BEFORE RUNNING TEST ---
+      const isSetup = projectName === "setup";
 
-    // Inject STORAGE_STATE so playwright.config.ts can use it
-    const envWithSession = { 
-        ...process.env, 
+      if (!isSetup && !fs.existsSync(sessionPath)) {
+        console.log("❌ Session file not found. Blocking execution.");
+        return resolve({
+          success: false,
+          log: "MISSING_SESSION_ERROR", // Special code for Frontend to handle
+        });
+      }
+
+      // Check if session is expired (5 minutes)
+      if (!isSetup && isSessionExpired(envId)) {
+        console.log("❌ Session expired (> 5 minutes). Deleting session.");
+        deleteExpiredSession(envId);
+        return resolve({
+          success: false,
+          log: "SESSION_EXPIRED_ERROR", // Special code for Frontend to handle
+        });
+      }
+      // -----------------------------------------
+
+      // 2. Construct command
+      let command = "";
+      if (isSetup) {
+        command = `npx playwright test --project=setup`;
+      } else {
+        // Convert backslashes to forward slashes for Playwright
+        const normalizedPath = fileName
+          ? `tests/bot-scripts/${fileName}`.replace(/\\/g, "/")
+          : "";
+        command = normalizedPath
+          ? `npx playwright test "${normalizedPath}" --project=${projectName}`
+          : `npx playwright test --project=${projectName}`;
+      }
+
+      console.log(`Executing: ${command}`);
+
+      // Get Start URL from metadata if fileName is provided
+      let startUrl = "";
+      if (fileName) {
+        const metadata = readJson(METADATA_PATH, {});
+        const scriptMeta = metadata[fileName];
+        startUrl = scriptMeta?.startUrl || "";
+        if (startUrl) {
+          console.log(`Start URL: ${startUrl}`);
+        }
+      }
+
+      // Inject STORAGE_STATE and START_URL so playwright.config.ts can use it
+      const envWithSession = {
+        ...process.env,
         ...envVars,
-        STORAGE_STATE: sessionPath 
-    };
+        STORAGE_STATE: sessionPath,
+        START_URL: startUrl, // Pass custom start URL to Playwright
+        HEADLESS_MODE: headless ? "true" : "false", // Control headless mode via env var
+      };
 
-    exec(command, { 
-      env: envWithSession, // Inject Profile variables + Session Path
-      cwd: app.getAppPath() 
-    }, (error, stdout, stderr) => {
-      resolve({ success: !error, log: stdout || stderr });
+      exec(
+        command,
+        {
+          env: envWithSession, // Inject Profile variables + Session Path
+          cwd: app.getAppPath(),
+        },
+        (error, stdout, stderr) => {
+          // Save timestamp on successful login
+          if (!error && isSetup) {
+            console.log("✅ Login successful. Saving session timestamp.");
+            saveSessionMeta(envId, Date.now());
+          }
+
+          resolve({ success: !error, log: stdout || stderr });
+        },
+      );
     });
-  });
-});
+  },
+);
 
 // Check Login Status
-ipcMain.handle('get-session-status', async (event, envId) => {
+ipcMain.handle("get-session-status", async (event, envId) => {
   const sessionPath = getSessionPath(envId);
-  return { isLoggedIn: fs.existsSync(sessionPath) };
+  const sessionExists = fs.existsSync(sessionPath);
+
+  if (!sessionExists) {
+    return { isLoggedIn: false, expiresIn: 0, loginTime: null };
+  }
+
+  const meta = getSessionMeta();
+  const loginTime = meta[envId];
+
+  if (!loginTime) {
+    return { isLoggedIn: false, expiresIn: 0, loginTime: null };
+  }
+
+  const now = Date.now();
+  const elapsed = now - loginTime;
+  const remaining = SESSION_TIMEOUT_MS - elapsed;
+
+  return {
+    isLoggedIn: remaining > 0,
+    expiresIn: Math.max(0, remaining),
+    loginTime: loginTime,
+  };
 });
 
 // Logout (Delete Session)
-ipcMain.handle('logout', async (event, envId) => {
+ipcMain.handle("logout", async (event, envId) => {
   const sessionPath = getSessionPath(envId);
   if (fs.existsSync(sessionPath)) {
     fs.unlinkSync(sessionPath);
@@ -172,37 +283,43 @@ ipcMain.handle('logout', async (event, envId) => {
 });
 
 // Read Script Content
-ipcMain.handle('read-script', async (event, { fileName }) => {
+ipcMain.handle("read-script", async (event, { fileName }) => {
   const filePath = path.join(SCRIPTS_DIR, fileName);
   if (!fs.existsSync(filePath)) {
-    return { success: false, content: '' };
+    return { success: false, content: "" };
   }
-  const content = fs.readFileSync(filePath, 'utf-8');
+  const content = fs.readFileSync(filePath, "utf-8");
   return { success: true, content };
 });
 
 // Save Script & Metadata
-ipcMain.handle('save-script', async (event, { fileName, content, category }) => {
-  ensureDir();
-  
-  // 1. Write File
-  const filePath = path.join(SCRIPTS_DIR, `${fileName}.spec.ts`);
-  fs.writeFileSync(filePath, content);
+ipcMain.handle(
+  "save-script",
+  async (event, { fileName, content, category, startUrl }) => {
+    ensureDir();
 
-  // 2. Update Metadata
-  const metadata = readJson(METADATA_PATH, {});
-  metadata[`${fileName}.spec.ts`] = { category };
-  writeJson(METADATA_PATH, metadata);
+    // 1. Write File
+    const filePath = path.join(SCRIPTS_DIR, `${fileName}.spec.ts`);
+    fs.writeFileSync(filePath, content);
 
-  return { success: true };
-});
+    // 2. Update Metadata
+    const metadata = readJson(METADATA_PATH, {});
+    metadata[`${fileName}.spec.ts`] = {
+      category,
+      startUrl: startUrl || "", // Store start URL
+    };
+    writeJson(METADATA_PATH, metadata);
+
+    return { success: true };
+  },
+);
 
 // Delete Script
-ipcMain.handle('delete-script', async (event, { fileName }) => {
-  const filePath = path.join(SCRIPTS_DIR, fileName); // fileName likely includes .spec.ts or we append it. 
+ipcMain.handle("delete-script", async (event, { fileName }) => {
+  const filePath = path.join(SCRIPTS_DIR, fileName); // fileName likely includes .spec.ts or we append it.
   // IMPORTANT: The frontend sends the full filename from getScripts which includes extension.
   // But let's check: getScripts returns 'test_01.spec.ts'.
-  
+
   if (fs.existsSync(filePath)) {
     fs.unlinkSync(filePath);
   }
@@ -218,29 +335,36 @@ ipcMain.handle('delete-script', async (event, { fileName }) => {
 });
 
 // Get Scripts with Metadata
-ipcMain.handle('get-scripts', async () => {
+ipcMain.handle("get-scripts", async () => {
   if (!fs.existsSync(SCRIPTS_DIR)) return [];
-  
-  const files = fs.readdirSync(SCRIPTS_DIR).filter(f => f.endsWith('.spec.ts'));
+
+  const files = fs
+    .readdirSync(SCRIPTS_DIR)
+    .filter((f) => f.endsWith(".spec.ts"));
   const metadata = readJson(METADATA_PATH, {});
 
-  return files.map(file => ({
+  return files.map((file) => ({
     name: file,
     // category here now refers to the 'envId'
-    category: metadata[file]?.category || '' 
+    category: metadata[file]?.category || "",
   }));
 });
 
 // --- New: Environment Management (Profiles) ---
 
-ipcMain.handle('get-envs', async () => {
+ipcMain.handle("get-envs", async () => {
   const data = readJson(ENVS_PATH, []);
-  
+
   // Migration Check: If data has old format (array of {key, url} instead of Profile)
   // We check if the first item has 'key' and NO 'variables'
-  if (Array.isArray(data) && data.length > 0 && 'key' in data[0] && !('variables' in data[0])) {
+  if (
+    Array.isArray(data) &&
+    data.length > 0 &&
+    "key" in data[0] &&
+    !("variables" in data[0])
+  ) {
     console.log("Migrating legacy envs.json to new Profile format...");
-    
+
     // Convert old list to a "Legacy Profile"
     const legacyVariables: { [key: string]: string } = {};
     data.forEach((item: any) => {
@@ -250,11 +374,11 @@ ipcMain.handle('get-envs', async () => {
     });
 
     const newProfile = {
-      id: 'env_legacy',
-      name: 'Legacy Migration',
-      variables: legacyVariables
+      id: "env_legacy",
+      name: "Legacy Migration",
+      variables: legacyVariables,
     };
-    
+
     // Save new format
     writeJson(ENVS_PATH, [newProfile]);
     return [newProfile];
@@ -263,7 +387,7 @@ ipcMain.handle('get-envs', async () => {
   return data;
 });
 
-ipcMain.handle('save-envs', async (event, envs) => {
+ipcMain.handle("save-envs", async (event, envs) => {
   writeJson(ENVS_PATH, envs);
   return { success: true };
 });
