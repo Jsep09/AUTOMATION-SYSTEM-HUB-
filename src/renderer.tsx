@@ -313,14 +313,28 @@ test('My Test', async ({ page }) => {
       setOpenAddScript(false);
 
       // Reset with valid envId
-      const validEnvId = profiles.length > 0 ? profiles[0].id : '';
-      setNewScript({ name: '', envId: validEnvId, content: defaultScriptTemplate, startUrl: '' });
-      setEditingScriptOriginalName(null);
+      resetScriptForm();
       await fetchScripts();
       toast.success("Script saved successfully!");
     } catch (error: any) {
       toast.error("Failed to save: " + (error.message || error));
     }
+  };
+
+  const resetScriptForm = () => {
+    const validEnvId = profiles.length > 0 ? profiles[0].id : '';
+    setNewScript({ name: '', envId: validEnvId, content: defaultScriptTemplate, startUrl: '' });
+    setEditingScriptOriginalName(null);
+  };
+
+  const handleOpenAddScriptDialog = () => {
+    resetScriptForm();
+    setOpenAddScript(true);
+  };
+
+  const handleCloseScriptDialog = () => {
+    setOpenAddScript(false);
+    resetScriptForm();
   };
 
   // --- Profile Management (New Dialog Based) ---
@@ -593,7 +607,7 @@ test('My Test', async ({ page }) => {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
-            <Button variant="contained" startIcon={<AddIcon />} onClick={() => setOpenAddScript(true)} sx={{ whiteSpace: 'nowrap' }}>
+            <Button variant="contained" startIcon={<AddIcon />} onClick={handleOpenAddScriptDialog} sx={{ whiteSpace: 'nowrap' }}>
               Add New Script
             </Button>
           </Box>
@@ -682,7 +696,7 @@ test('My Test', async ({ page }) => {
       )}
 
       {/* --- DIALOG: Add/Edit Script --- */}
-      <Dialog open={openAddScript} onClose={() => setOpenAddScript(false)} fullWidth maxWidth="md">
+      <Dialog open={openAddScript} onClose={handleCloseScriptDialog} fullWidth maxWidth="md">
         <DialogTitle>{editingScriptOriginalName ? 'Edit Script' : 'Add New Test Script'}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
@@ -705,7 +719,7 @@ test('My Test', async ({ page }) => {
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenAddScript(false)}>Cancel</Button>
+          <Button onClick={handleCloseScriptDialog}>Cancel</Button>
           <Button variant="contained" onClick={handleSaveNewScript}>Save Script</Button>
         </DialogActions>
       </Dialog>
