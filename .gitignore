@@ -99,6 +99,6 @@ test-results/
 playwright-report/
 
 # User Generated (Bot Scripts & Profiles)
-tests/bot-scripts/*.spec.ts
+# tests/bot-scripts/*.spec.ts
 tests/bot-scripts/metadata.json
 tests/bot-scripts/envs.json

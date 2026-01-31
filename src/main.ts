@@ -130,7 +130,8 @@ ipcMain.handle('run-playwright', async (event, { fileName, projectName, envId })
     
     if (fileName) {
         // Run specific script
-        const scriptPath = path.join('tests', 'bot-scripts', fileName); 
+        // FIX: Use forward slashes for Playwright to avoid Regex issues on Windows
+        const scriptPath = `tests/bot-scripts/${fileName}`;
         command = `npx playwright test "${scriptPath}" ${projectFlag}`;
     } else {
         // Run all (or setup)
