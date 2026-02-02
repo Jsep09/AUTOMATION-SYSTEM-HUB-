@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   deleteScript: (fileName: string) =>
     ipcRenderer.invoke("delete-script", { fileName }),
   getScripts: () => ipcRenderer.invoke("get-scripts"),
+  // Magic Recorder
+  recordScript: (data: { envId?: string; url?: string }) => ipcRenderer.invoke("record-script", data),
   // New Envs Management
   getEnvs: () => ipcRenderer.invoke("get-envs"),
   saveEnvs: (data: any) => ipcRenderer.invoke("save-envs", data),
@@ -21,4 +23,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getSessionStatus: (envId: string) =>
     ipcRenderer.invoke("get-session-status", envId),
   logout: (envId: string) => ipcRenderer.invoke("logout", envId),
+  // Live logs
+  onLog: (callback: (data: string) => void) => {
+    ipcRenderer.on('playwright-log', (event, data) => callback(data));
+  },
+  offLog: () => ipcRenderer.removeAllListeners('playwright-log')
 });

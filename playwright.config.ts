@@ -7,7 +7,7 @@ dotenv.config();
 export default defineConfig({
   testDir: "./tests",
   fullyParallel: true,
-  workers: 1, // Sequential execution for safety
+  workers: process.env.CI ? 1 : undefined, // Enable parallelism (uses all cores)
   reporter: "html",
   use: {
     // Base URL will be overridden by the process.env passed from Main
@@ -15,6 +15,18 @@ export default defineConfig({
     headless: process.env.HEADLESS_MODE === "true",
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
+    video: "retain-on-failure", // Save resources
+    
+    // Low-level browser optimization
+    launchOptions: {
+      args: [
+        '--no-sandbox', 
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--disable-gpu' // Often helps with stability/speed on headless
+      ],
+    }
   },
   projects: [
     // 1. Setup Project (Login Only)
