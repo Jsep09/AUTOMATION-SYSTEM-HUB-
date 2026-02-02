@@ -8,6 +8,7 @@ import {
   Backdrop, FormControlLabel, Checkbox
 } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import PlaylistPlayIcon from '@mui/icons-material/PlaylistPlay';
 import AddIcon from '@mui/icons-material/Add';
 import SettingsIcon from '@mui/icons-material/Settings';
 import CodeIcon from '@mui/icons-material/Code';
@@ -101,11 +102,14 @@ test('My Test', async ({ page }) => {
   const [selectedLoginEnvId, setSelectedLoginEnvId] = useState('');
 
   // Initial Load
+  // Initial Load (Run once)
   useEffect(() => {
     loadData();
+  }, []);
 
-    // Update session status every second for real-time countdown
-    // But pause when editing scripts or login dialog to avoid resetting form state
+  // Update session status every second for real-time countdown
+  // But pause when editing scripts or login dialog to avoid resetting form state
+  useEffect(() => {
     const interval = setInterval(() => {
       if (!openAddScript && !openLoginDialog) {
         fetchProfiles();
@@ -431,6 +435,19 @@ test('My Test', async ({ page }) => {
     await handleRunScript(scriptWithProfile);
   };
 
+  const handleRunAllScripts = async (profileId: string) => {
+    const profileScripts = scripts.filter(s => s.category === profileId);
+    if (profileScripts.length === 0) return;
+
+    if (!confirm(`Run all ${profileScripts.length} scripts for this profile in PARALLEL?`)) return;
+
+    // Run all scripts simultaneously
+    // We don't await the loop, allowing them to fire off at once
+    profileScripts.forEach(script => {
+      handleRunScript(script);
+    });
+  };
+
   // Sort profiles: Favorites first, then Create ID
   const sortedProfiles = [...profiles].sort((a, b) => {
     if (!!a.isFavorite !== !!b.isFavorite) {
@@ -457,9 +474,27 @@ test('My Test', async ({ page }) => {
           {loginLoading && !activeProfileId ? 'Logging in...' : 'Login Bot '}
         </Button>
       </Box>
-      <Typography variant="h6" sx={{ fontWeight: 'bold', fontFamily: 'Orbitron, sans-serif' }}>
-        By Handsome Jom
-      </Typography>
+      <Box
+        sx={{
+          background: 'linear-gradient(270deg, #ff00cc, #3333ff, #00cbff, #ff00cc)',
+          backgroundSize: '400%',
+          animation: 'glowing 15s linear infinite',
+          padding: '4px 12px',
+          borderRadius: 2,
+          display: 'inline-block',
+          mb: 2,
+          boxShadow: '0 0 15px rgba(0, 203, 255, 0.5)',
+          '@keyframes glowing': {
+            '0%': { backgroundPosition: '0 0' },
+            '50%': { backgroundPosition: '400% 0' },
+            '100%': { backgroundPosition: '0 0' },
+          }
+        }}
+      >
+        <Typography variant="h6" sx={{ fontWeight: 'bold', fontFamily: 'Orbitron, sans-serif', color: 'white', textShadow: '0 0 5px rgba(255,255,255,0.8)' }}>
+          By dev Jom ไงหนูไม่คุ้นหูหน่อยหรอ
+        </Typography>
+      </Box>
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
         <Tabs value={tabValue} onChange={(e, val) => setTabValue(val)}>
           <Tab icon={<PlayArrowIcon />} label="Run Scripts" />
@@ -484,6 +519,20 @@ test('My Test', async ({ page }) => {
                     {profile.isFavorite && <StarIcon color="warning" fontSize="small" />}
                     <Typography fontWeight="bold">{profile.name}</Typography>
                     <Chip label={`${profileScripts.length} Scripts`} size="small" variant="outlined" sx={{ ml: 1 }} />
+
+                    <Button
+                      variant="outlined"
+                      color="secondary"
+                      size="small"
+                      startIcon={<PlaylistPlayIcon />}
+                      sx={{ ml: 2, height: 24, fontSize: '0.75rem' }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRunAllScripts(profile.id);
+                      }}
+                    >
+                      Run All
+                    </Button>
                     {profile.isLoggedIn ? (
                       <Chip label="Ready" color="success" size="small" sx={{ ml: 1, height: 20 }} />
                     ) : (
@@ -875,6 +924,7 @@ test('My Test', async ({ page }) => {
   );
 }
 import { createRoot } from 'react-dom/client';
+
 
 const rootElement = document.getElementById('root');
 const root = createRoot(rootElement!);
