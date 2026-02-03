@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createRoot } from 'react-dom/client';
 import {
   Container, Typography, Box, Tabs, Tab, Paper, Button,
   TextField, Select, MenuItem, InputLabel, FormControl,
@@ -28,6 +29,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
+import AssessmentIcon from '@mui/icons-material/Assessment';
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
 import TerminalIcon from '@mui/icons-material/Terminal';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
@@ -50,19 +52,22 @@ interface Script {
   name: string;
   category: string;
   startUrl?: string; // Optional custom start URL
+  description?: string; // Optional description
 }
 
 interface ElectronAPI {
-  runTest: (data: { fileName?: string; projectName?: string; envId?: string; headless?: boolean }) => Promise<{ success: boolean; log: string }>;
-  saveScript: (data: { fileName: string; content: string; category: string; startUrl?: string }) => Promise<{ success: boolean }>;
+  runTest: (data: { fileName?: string; projectName?: string; envId?: string; headless?: boolean }) => Promise<{ success: boolean; log: string; runId?: string }>;
+  saveScript: (data: { fileName: string; content: string; category: string; startUrl?: string; description?: string }) => Promise<{ success: boolean }>;
   readScript: (fileName: string) => Promise<{ success: boolean; content: string }>;
   deleteScript: (fileName: string) => Promise<{ success: boolean }>;
   getScripts: () => Promise<Script[]>;
+  cancelTest: (runId: string) => Promise<{ success: boolean; error?: string }>;
   getEnvs: () => Promise<Profile[]>;
   saveEnvs: (envs: Profile[]) => Promise<{ success: boolean }>;
   getSessionStatus: (envId: string) => Promise<{ isLoggedIn: boolean; expiresIn: number; loginTime: number | null }>;
   logout: (envId: string) => Promise<{ success: boolean }>;
   recordScript: (data: { envId?: string; url?: string }) => Promise<{ success: boolean; content: string; error?: string }>;
+  openReport: (fileName: string) => Promise<{ success: boolean; error?: string }>;
   onLog: (callback: (data: string) => void) => void;
   offLog: () => void;
 }
@@ -134,6 +139,7 @@ export default function Dashboard() {
   const [isRecording, setIsRecording] = useState(false); // New: Is Recording Active?
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
   const [scriptStatuses, setScriptStatuses] = useState<Record<string, 'idle' | 'running' | 'success' | 'error'>>({});
+  const [activeRunIds, setActiveRunIds] = useState<Record<string, string>>({}); // Store runId for each running script
   const [searchTerm, setSearchTerm] = useState('');
 
   // Terminal State
@@ -177,7 +183,7 @@ test('My Test', async ({ page }) => {
   // Your test code here
   
 });`;
-  const [newScript, setNewScript] = useState({ name: '', envId: '', content: defaultScriptTemplate, startUrl: '' });
+  const [newScript, setNewScript] = useState({ name: '', envId: '', content: defaultScriptTemplate, startUrl: '', description: '' });
   const [editingScriptOriginalName, setEditingScriptOriginalName] = useState<string | null>(null);
   const [selectedLoginEnvId, setSelectedLoginEnvId] = useState('');
 
@@ -255,6 +261,11 @@ test('My Test', async ({ page }) => {
         headless: profile?.headless || false // Use per-profile headless setting
       });
 
+      // Save runId for cancellation
+      if (result.runId) {
+        setActiveRunIds(prev => ({ ...prev, [script.name]: result.runId! }));
+      }
+
       if (!result.success && result.log === "MISSING_SESSION_ERROR") {
         setScriptStatuses(prev => ({ ...prev, [script.name]: 'error' }));
         toast.error(`Authentication Missing for profile "${profile?.name || 'Unknown'}"!`, {
@@ -286,9 +297,12 @@ test('My Test', async ({ page }) => {
             description: "Execution completed successfully."
           });
         } else {
+          // If manually cancelled/killed, logic might vary, but usually code != 0
           setScriptStatuses(prev => ({ ...prev, [script.name]: 'error' }));
-          toast.error(`"${script.name}" Failed`, {
-            description: result.log,
+
+          // Check if it was a cancellation (we can infer or just generic fail)
+          toast.error(`"${script.name}" Failed/Stopped`, {
+            description: "Execution stopped or failed.",
             duration: 5000
           });
         }
@@ -296,6 +310,26 @@ test('My Test', async ({ page }) => {
     } catch (error: any) {
       setScriptStatuses(prev => ({ ...prev, [script.name]: 'error' }));
       toast.error(`Error running script: ${error.message || error}`);
+    } finally {
+      // Cleanup runId
+      setActiveRunIds(prev => {
+        const newState = { ...prev };
+        delete newState[script.name];
+        return newState;
+      });
+    }
+  };
+
+  const handleCancelScript = async (scriptName: string) => {
+    const runId = activeRunIds[scriptName];
+    if (!runId) return;
+
+    try {
+      toast.info(`Cancelling ${scriptName}...`);
+      await window.electronAPI.cancelTest(runId);
+      // Status update will happen in handleRunScript's finally/await result
+    } catch (err: any) {
+      toast.error("Failed to cancel: " + err.message);
     }
   };
 
@@ -362,7 +396,8 @@ test('My Test', async ({ page }) => {
           name: cleanName,
           envId: script.category,
           content: result.content,
-          startUrl: script.startUrl || '' // Load existing start URL
+          startUrl: script.startUrl || '', // Load existing start URL
+          description: script.description || '' // Load existing description
         });
         setEditingScriptOriginalName(script.name);
         setOpenAddScript(true);
@@ -392,7 +427,8 @@ test('My Test', async ({ page }) => {
         fileName: newScript.name,
         category: newScript.envId,
         content: newScript.content,
-        startUrl: newScript.startUrl // Pass start URL to backend
+        startUrl: newScript.startUrl, // Pass start URL to backend
+        description: newScript.description // Pass description
       });
       setOpenAddScript(false);
 
@@ -407,7 +443,7 @@ test('My Test', async ({ page }) => {
 
   const resetScriptForm = () => {
     const validEnvId = profiles.length > 0 ? profiles[0].id : '';
-    setNewScript({ name: '', envId: validEnvId, content: defaultScriptTemplate, startUrl: '' });
+    setNewScript({ name: '', envId: validEnvId, content: defaultScriptTemplate, startUrl: '', description: '' });
     setEditingScriptOriginalName(null);
   };
 
@@ -450,7 +486,8 @@ test('My Test', async ({ page }) => {
           name: `recorded_${Date.now()}`,
           envId: recordTargetEnvId, // Auto-assign to the profile we used
           content: result.content,
-          startUrl: recordStartUrl
+          startUrl: recordStartUrl,
+          description: ''
         });
         setOpenAddScript(true);
         toast.success("Recording Captured!", { description: "Script code generated successfully." });
@@ -709,6 +746,17 @@ test('My Test', async ({ page }) => {
                             {scriptStatuses[script.name] === 'success' && <Chip label="Done" color="success" size="small" variant="outlined" icon={<CheckCircleIcon />} />}
                             {scriptStatuses[script.name] === 'error' && <Chip label="Failed" color="error" size="small" variant="outlined" icon={<ErrorIcon />} />}
 
+                            <IconButton
+                              title="View Report"
+                              disabled={scriptStatuses[script.name] === 'running'}
+                              onClick={async () => {
+                                const result = await window.electronAPI.openReport(script.name);
+                                if (!result.success) toast.error(result.error || "Failed to open report");
+                              }}
+                            >
+                              <AssessmentIcon color="action" />
+                            </IconButton>
+
                             <Button
                               variant="contained"
                               color={scriptStatuses[script.name] === 'running' ? "secondary" : "success"}
@@ -719,9 +767,36 @@ test('My Test', async ({ page }) => {
                             >
                               {scriptStatuses[script.name] === 'running' ? 'Running...' : 'Run'}
                             </Button>
+
+                            {/* Cancel Button */}
+                            {scriptStatuses[script.name] === 'running' && (
+                              <Button
+                                variant="contained"
+                                color="error"
+                                size="small"
+                                sx={{ ml: 1 }}
+                                startIcon={<CloseIcon />}
+                                onClick={() => handleCancelScript(script.name)}
+                              >
+                                Stop
+                              </Button>
+                            )}
                           </Box>
                         }>
-                          <ListItemText primary={script.name} />
+                          <ListItemText
+                            primary={
+                              <React.Fragment>
+                                <Typography component="span" variant="body1" sx={{ fontWeight: 'bold' }}>
+                                  {script.name}
+                                </Typography>
+                                {script.description && (
+                                  <Typography component="span" variant="body2" color="text.secondary" sx={{ display: 'block', fontSize: '0.85rem' }}>
+                                    {script.description}
+                                  </Typography>
+                                )}
+                              </React.Fragment>
+                            }
+                          />
                         </ListItem>
                       ))}
                     </List>
@@ -741,6 +816,15 @@ test('My Test', async ({ page }) => {
                         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                           {scriptStatuses[s.name] === 'success' && <CheckCircleIcon color="success" />}
                           {scriptStatuses[s.name] === 'error' && <ErrorIcon color="error" />}
+                          <IconButton
+                            title="View Report"
+                            onClick={async () => {
+                              const result = await window.electronAPI.openReport(s.name);
+                              if (!result.success) toast.error(result.error || "Failed to open report");
+                            }}
+                          >
+                            <AssessmentIcon color="action" />
+                          </IconButton>
                           <Button
                             variant="contained" color="warning" size="small"
                             startIcon={scriptStatuses[s.name] === 'running' ? <CircularProgress size={20} color="inherit" /> : <PlayArrowIcon />}
@@ -749,6 +833,20 @@ test('My Test', async ({ page }) => {
                           >
                             {scriptStatuses[s.name] === 'running' ? 'Running' : 'Run'}
                           </Button>
+
+                          {/* Cancel Button */}
+                          {scriptStatuses[s.name] === 'running' && (
+                            <Button
+                              variant="contained"
+                              color="error"
+                              size="small"
+                              sx={{ ml: 1 }}
+                              startIcon={<CloseIcon />}
+                              onClick={() => handleCancelScript(s.name)}
+                            >
+                              Stop
+                            </Button>
+                          )}
                           <IconButton color="primary" onClick={() => handleEditScript(s)} aria-label="edit">
                             <EditIcon />
                           </IconButton>
@@ -759,8 +857,16 @@ test('My Test', async ({ page }) => {
                       }>
                         <ListItemText
                           primary={s.name}
-                          secondary="No Profile Assigned - Run manually"
-                          secondaryTypographyProps={{ color: 'text.secondary', variant: 'caption' }}
+                          secondary={
+                            <React.Fragment>
+                              <Typography component="span" variant="caption" display="block">No Profile Assigned - Run manually</Typography>
+                              {s.description && (
+                                <Typography component="span" variant="caption" color="text.secondary">
+                                  {s.description}
+                                </Typography>
+                              )}
+                            </React.Fragment>
+                          }
                         />
                       </ListItem>
                     ))}
@@ -813,8 +919,25 @@ test('My Test', async ({ page }) => {
                   }>
                     <CodeIcon sx={{ mr: 2, color: 'text.secondary' }} />
                     <ListItemText
-                      primary={script.name}
-                      secondary={profile ? profile.name : 'Unknown Profile'}
+                      primary={
+                        <React.Fragment>
+                          <Typography component="span" variant="body1" sx={{ fontWeight: 'bold' }}>
+                            {script.name}
+                          </Typography>
+                        </React.Fragment>
+                      }
+                      secondary={
+                        <React.Fragment>
+                          <Typography component="span" variant="body2" display="block">
+                            {profile ? profile.name : 'Unknown Profile'}
+                          </Typography>
+                          {script.description && (
+                            <Typography component="span" variant="caption" color="text.secondary">
+                              {script.description}
+                            </Typography>
+                          )}
+                        </React.Fragment>
+                      }
                     />
                   </ListItem>
                 );
@@ -900,6 +1023,13 @@ test('My Test', async ({ page }) => {
                 fullWidth
                 placeholder="e.g., https://example.com/tracking/123"
                 helperText="Leave empty to use BASE_URL from profile"
+              />
+              <TextField
+                label="Description"
+                value={newScript.description}
+                onChange={(e) => setNewScript({ ...newScript, description: e.target.value })}
+                fullWidth
+                placeholder="Briefly describe what this script does..."
               />
               <TextField label="Script Content" multiline rows={15} value={newScript.content} onChange={(e) => setNewScript({ ...newScript, content: e.target.value })} fullWidth />
             </Stack>
@@ -1152,7 +1282,7 @@ test('My Test', async ({ page }) => {
     </ThemeProvider>
   );
 }
-import { createRoot } from 'react-dom/client';
+
 
 
 const rootElement = document.getElementById('root');

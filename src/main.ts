@@ -1,5 +1,5 @@
 // เพิ่ม import ที่จำเป็นด้านบน
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { exec } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
@@ -148,11 +148,38 @@ const deleteExpiredSession = (envId: string) => {
 
 // --- 2. IPC Handlers ---
 
+// Store running processes: runId -> ChildProcess
+const runningProcesses = new Map<string, any>();
+
+// Cancel Test Handler
+ipcMain.handle("cancel-test", async (event, runId) => {
+  const child = runningProcesses.get(runId);
+  if (child) {
+    console.log(`Killing process ${runId}`);
+
+    // Kill the process tree (on Windows taskkill is more effective for deep trees)
+    if (process.platform === "win32") {
+      exec(`taskkill /pid ${child.pid} /T /F`, (err) => {
+        if (err) console.error("Failed to kill process tree:", err);
+      });
+    } else {
+      child.kill();
+    }
+
+    runningProcesses.delete(runId);
+    return { success: true };
+  }
+  return { success: false, error: "Process not found" };
+});
+
 // Run Playwright
 ipcMain.handle(
   "run-playwright",
   async (event, { fileName, projectName, envId, headless }) => {
     return new Promise((resolve) => {
+      // Generate a unique Run ID
+      const runId = `run_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
       // 1. Get Environment Variables for the specific Env ID
       const profiles = readJson(ENVS_PATH, []);
       const profile = profiles.find((p: any) => p.id === envId);
@@ -176,6 +203,7 @@ ipcMain.handle(
         return resolve({
           success: false,
           log: "MISSING_SESSION_ERROR", // Special code for Frontend to handle
+          runId,
         });
       }
 
@@ -186,35 +214,49 @@ ipcMain.handle(
         return resolve({
           success: false,
           log: "SESSION_EXPIRED_ERROR", // Special code for Frontend to handle
+          runId,
         });
       }
       // -----------------------------------------
 
       // 2. Construct command
       let commandLine = "";
+      let reportDir = "playwright-report"; // Default for setup/all
+
       if (isSetup) {
         commandLine = `npx playwright test --project=setup`;
       } else {
         const normalizedPath = fileName
           ? `tests/bot-scripts/${fileName}`.replace(/\\/g, "/")
           : "";
-        commandLine = `npx playwright test ${normalizedPath} --project=ba-tests --headed`;
+
+        // Per-script report directory
+        if (fileName) {
+          const safeName = fileName.replace(/[^a-z0-9]/gi, "_").toLowerCase();
+          reportDir = `playwright-report/${safeName}`;
+        }
+
+        commandLine = `npx playwright test ${normalizedPath}  --headed`;
       }
 
       // Add Headless flag if requested
       if (headless) {
-         // Actually, my previous logic forced --headed.
-         // Let's rewrite strictly:
-         if (commandLine.includes("--headed")) {
-            commandLine = commandLine.replace("--headed", "");
-         }
+        // Actually, my previous logic forced --headed.
+        // Let's rewrite strictly:
+        if (commandLine.includes("--headed")) {
+          commandLine = commandLine.replace("--headed", "");
+        }
       }
 
       // Get Start URL from metadata if fileName is provided
       let startUrl = "";
       if (fileName) {
         const metadata = readJson(METADATA_PATH, {});
-        const scriptMeta = metadata[fileName];
+        // Fix: Check if fileName already has extension
+        const metaKey = fileName.endsWith(".spec.ts")
+          ? fileName
+          : `${fileName}.spec.ts`;
+        const scriptMeta = metadata[metaKey];
         startUrl = scriptMeta?.startUrl || "";
         if (startUrl) {
           console.log(`Start URL: ${startUrl}`);
@@ -228,50 +270,90 @@ ipcMain.handle(
         STORAGE_STATE: sessionPath,
         START_URL: startUrl, // Pass custom start URL to Playwright
         HEADLESS_MODE: headless ? "true" : "false", // Control headless mode via env var
+        PLAYWRIGHT_REPORT_DIR: reportDir, // Pass report directory
       };
 
-      console.log(`Executing: ${commandLine}`);
-      event.sender.send('playwright-log', `\n> ${commandLine}\n`); // Echo command
+      console.log(`Executing (${runId}): ${commandLine}`);
+      event.sender.send("playwright-log", `\n> ${commandLine}\n`); // Echo command
 
       // 3. EXECUTE with Streaming
-      const child = exec(commandLine, { env: envWithSession, cwd: app.getAppPath() });
+      const child = exec(commandLine, {
+        env: envWithSession,
+        cwd: app.getAppPath(),
+      });
+
+      // Store process reference
+      runningProcesses.set(runId, child);
 
       let fullLog = "";
 
       // Stream stdout
-      child.stdout?.on('data', (data) => {
+      child.stdout?.on("data", (data) => {
         const text = data.toString();
         fullLog += text;
-        event.sender.send('playwright-log', text);
+        event.sender.send("playwright-log", text);
       });
 
       // Stream stderr
-      child.stderr?.on('data', (data) => {
+      child.stderr?.on("data", (data) => {
         const text = data.toString();
         fullLog += text;
-        event.sender.send('playwright-log', text);
+        event.sender.send("playwright-log", text);
       });
 
       // Handle Exit
-      child.on('close', (code) => {
+      child.on("close", (code) => {
+        // Remove from map
+        runningProcesses.delete(runId);
+
         // Save timestamp on successful login
         if (code === 0 && isSetup) {
-           console.log("✅ Login successful. Saving session timestamp.");
-           saveSessionMeta(envId, Date.now());
+          console.log("✅ Login successful. Saving session timestamp.");
+          saveSessionMeta(envId, Date.now());
         }
 
-        resolve({ success: code === 0, log: fullLog });
+        // Check if it was killed manually (often code is null or non-zero, but we rely on the kill action)
+        // If we actively killed it, it might still have exit code 1 or similar.
+
+        resolve({ success: code === 0, log: fullLog, runId });
       });
-      
-      child.on('error', (err) => {
-         const errText = `Failed to start process: ${err.message}`;
-         fullLog += errText;
-         event.sender.send('playwright-log', errText);
-         resolve({ success: false, log: fullLog });
+
+      child.on("error", (err) => {
+        runningProcesses.delete(runId);
+        const errText = `Failed to start process: ${err.message}`;
+        fullLog += errText;
+        event.sender.send("playwright-log", errText);
+        resolve({ success: false, log: fullLog, runId });
       });
     });
   },
 );
+
+// Open Report
+ipcMain.handle("open-report", async (event, fileName) => {
+  let reportPath = path.join(
+    app.getAppPath(),
+    "playwright-report",
+    "index.html",
+  ); // Default
+
+  if (fileName) {
+    const safeName = fileName.replace(/[^a-z0-9]/gi, "_").toLowerCase();
+    reportPath = path.join(
+      app.getAppPath(),
+      "playwright-report",
+      safeName,
+      "index.html",
+    );
+  }
+
+  if (fs.existsSync(reportPath)) {
+    await shell.openPath(reportPath);
+    return { success: true };
+  } else {
+    return { success: false, error: "Report not found. Run the script first." };
+  }
+});
 
 // Check Login Status
 ipcMain.handle("get-session-status", async (event, envId) => {
@@ -374,6 +456,8 @@ ipcMain.handle("get-scripts", async () => {
     name: file,
     // category here now refers to the 'envId'
     category: metadata[file]?.category || "",
+    startUrl: metadata[file]?.startUrl || "",
+    description: metadata[file]?.description || "",
   }));
 });
 
@@ -427,11 +511,14 @@ ipcMain.handle("record-script", async (event, { envId, url }) => {
     const hasSession = fs.existsSync(sessionPath);
 
     // 2. Prepare Temp Output File
-    const tempFile = path.join(app.getAppPath(), `temp_record_${Date.now()}.ts`);
+    const tempFile = path.join(
+      app.getAppPath(),
+      `temp_record_${Date.now()}.ts`,
+    );
 
     // 3. Construct Command
     let command = `npx playwright codegen -o "${tempFile}"`;
-    
+
     if (hasSession) {
       console.log(`Recorder: Loading session from ${sessionPath}`);
       command += ` --load-storage="${sessionPath}"`;
@@ -444,32 +531,48 @@ ipcMain.handle("record-script", async (event, { envId, url }) => {
     console.log(`Recorder Executing: ${command}`);
 
     // 4. Run Codegen
-    exec(command, { cwd: app.getAppPath(), env: process.env }, (error, stdout, stderr) => {
-      if (error) {
-        console.error("Recorder Error:", error);
-        // Don't return yet, sometimes codegen exits with code but still produces output? 
-        // Actually playwright codegen usually exits cleanly.
-        // If error code is present, it might be command not found.
-      }
-
-      // 5. On Close: Read the file
-      if (fs.existsSync(tempFile)) {
-        try {
-          const content = fs.readFileSync(tempFile, 'utf-8');
-          fs.unlinkSync(tempFile); // Cleanup
-          resolve({ success: true, content });
-        } catch (readError: any) {
-          resolve({ success: false, content: '', error: `Failed to read recording: ${readError.message}` });
-        }
-      } else {
-        // User closed without generating file or error
-        // Check if there was an exec error
+    exec(
+      command,
+      { cwd: app.getAppPath(), env: process.env },
+      (error, stdout, stderr) => {
         if (error) {
-           resolve({ success: false, content: '', error: `Process Error: ${error.message} \n ${stderr}` });
-        } else {
-           resolve({ success: false, content: '', error: 'No recording generated (or closed instantly).' });
+          console.error("Recorder Error:", error);
+          // Don't return yet, sometimes codegen exits with code but still produces output?
+          // Actually playwright codegen usually exits cleanly.
+          // If error code is present, it might be command not found.
         }
-      }
-    });
+
+        // 5. On Close: Read the file
+        if (fs.existsSync(tempFile)) {
+          try {
+            const content = fs.readFileSync(tempFile, "utf-8");
+            fs.unlinkSync(tempFile); // Cleanup
+            resolve({ success: true, content });
+          } catch (readError: any) {
+            resolve({
+              success: false,
+              content: "",
+              error: `Failed to read recording: ${readError.message}`,
+            });
+          }
+        } else {
+          // User closed without generating file or error
+          // Check if there was an exec error
+          if (error) {
+            resolve({
+              success: false,
+              content: "",
+              error: `Process Error: ${error.message} \n ${stderr}`,
+            });
+          } else {
+            resolve({
+              success: false,
+              content: "",
+              error: "No recording generated (or closed instantly).",
+            });
+          }
+        }
+      },
+    );
   });
 });

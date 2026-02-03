@@ -8,7 +8,14 @@ export default defineConfig({
   testDir: "./tests",
   fullyParallel: true,
   workers: process.env.CI ? 1 : undefined, // Enable parallelism (uses all cores)
-  reporter: "html",
+  reporter: [
+    [
+      "html",
+      {
+        outputFolder: process.env.PLAYWRIGHT_REPORT_DIR || "playwright-report",
+      },
+    ],
+  ],
   use: {
     // Base URL will be overridden by the process.env passed from Main
     baseURL: process.env.BASE_URL,
@@ -16,17 +23,17 @@ export default defineConfig({
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
     video: "retain-on-failure", // Save resources
-    
+
     // Low-level browser optimization
     launchOptions: {
       args: [
-        '--no-sandbox', 
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--disable-gpu' // Often helps with stability/speed on headless
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-accelerated-2d-canvas",
+        "--disable-gpu", // Often helps with stability/speed on headless
       ],
-    }
+    },
   },
   projects: [
     // 1. Setup Project (Login Only)
